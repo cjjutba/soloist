@@ -44,7 +44,7 @@ story_location: _bmad-output/implementation-artifacts
 development_status:
   # ── Epic 1: Freelancer Account & Branded Workspace ──
   epic-1: in-progress
-  1-1-deployable-walking-skeleton: in-progress
+  1-1-deployable-walking-skeleton: review
   1-2-tenant-scoped-data-layer-postgres-rls-isolation-core: backlog
   1-3-freelancer-sign-up-tenant-provisioning-slug: backlog
   1-4-authentication-sessions-single-domain-role-guard: backlog

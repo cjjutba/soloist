@@ -3,7 +3,7 @@ baseline_commit: 1584226eedb10d0d280d9f5a621d4728ce0247ea
 ---
 # Story 1.1: Deployable Walking Skeleton
 
-Status: in-progress
+Status: review
 
 > ⚠️ **Revised 2026-06-06 — routing course-corrected from host-based to PATH-BASED** (single domain `soloist.cjjutba.com`; see `sprint-change-proposal-2026-06-06.md`). The host-routing proxy + `resolveSurface` were removed; surfaces are now native path segments: `/` (landing), `/app` (Cockpit), `/portal` (Client Portal), `/invite/[token]`, plus `not-found`. AC-3, Task 4, the File List, and the Change Log reflect the final path-based implementation; earlier host-routing detail is kept as history.
 
@@ -45,10 +45,10 @@ so that deploy + subdomain routing + the design system are proven end-to-end on 
   - [x] Local-dev routing works via `*.localhost` (root domain `localhost` in `.env.local`); proxy handles `.localhost` + `*.vercel.app` preview hosts. `.env.example` documents it.
 - [x] **Task 5 — Providers baseline (AC: 1)**
   - [x] `src/app/providers.tsx`: TanStack Query provider (refetch-on-focus, 15s staleTime) + sonner `<Toaster/>` in the root layout. No Sentry/CI (Story 1.7).
-- [ ] **Task 6 — Deploy + domains (AC: 3) — ⚠️ REQUIRES CJ (external credentials)**
-  - [ ] Connect the repo to Vercel; first deploy. *(Needs your Vercel account — `vercel login` is interactive; I can't authenticate as you.)*
-  - [ ] In Vercel → Project → Domains, add `*.cjjutba.com` **and** `soloist.cjjutba.com`. Wildcard SSL requires `cjjutba.com` on Vercel nameservers (`ns1.vercel-dns.com` / `ns2.vercel-dns.com`) — a DNS change at your registrar. *(Only you can change your domain's DNS.)*
-  - [ ] Verify live: `soloist.cjjutba.com` → Cockpit; `<slug>.cjjutba.com` → Portal; apex/unknown → not-found. *(The exact same routing is already proven locally — see Completion Notes.)*
+- [x] **Task 6 — Deploy + domain (AC: 3)** ✓ **DONE (2026-06-06)**
+  - [x] Vercel project `soloist` created (CJ ran `vercel login`), env fixed, deployed to production.
+  - [x] Custom domain `soloist.cjjutba.com` live via a GoDaddy **CNAME** (`soloist → cname.vercel-dns.com`) — no nameserver change, operator email untouched. (The wildcard/nameserver path was dropped in the path-based course correction.)
+  - [x] Verified live in production: `/` → 200 landing · `/app` → 200 Cockpit · `/portal` → 200 Portal · `/invite/[token]` → 200 · `/nonsense` → 404.
 - [x] **Task 7 — Verify (all ACs)**
   - [x] `npm run build` clean (Next 16.2.7, Turbopack); `tsc --noEmit` clean; `eslint` clean.
   - [x] `src/lib/resolve-surface.test.ts` (vitest): **11 tests pass** — cockpit/portal/apex/www/unrelated/empty/case-insensitive across prod, `.localhost`, and `*.vercel.app` host shapes.
