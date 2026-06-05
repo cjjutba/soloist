@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>UX Design Validation: Soloist</title>
+<style>
+  :root {
+    --bg: #fafaf9;
+    --surface: #ffffff;
+    --border: #e7e5e4;
+    --text: #1c1917;
+    --muted: #78716c;
+
+    --verdict-strong: #16a34a;
+    --verdict-adequate: #65a30d;
+    --verdict-thin: #d97706;
+    --verdict-broken: #dc2626;
+
+    --sev-low: #64748b;
+    --sev-medium: #ca8a04;
+    --sev-high: #ea580c;
+    --sev-critical: #dc2626;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.6;
+    font-size: 15px;
+  }
+  .container { max-width: 960px; margin: 0 auto; padding: 32px 24px 64px; }
+
+  header.report-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 24px;
+  }
+  .title h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+  .title .subtitle { color: var(--muted); font-size: 13px; margin-top: 4px; font-family: ui-monospace, "SF Mono", Menlo, monospace; }
+  .resolved-pill { font-size: 11px; padding: 4px 11px; border-radius: 999px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: white; background: var(--verdict-strong); white-space: nowrap; }
+
+  .synthesis {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--muted);
+    border-radius: 8px;
+    padding: 18px 22px;
+    margin-bottom: 24px;
+    font-size: 15.5px;
+  }
+  .synthesis p { margin: 0 0 10px; }
+  .synthesis p:last-child { margin-bottom: 0; }
+  .synthesis .resolved { border-left: 3px solid var(--verdict-strong); padding-left: 12px; }
+
+  .dimension-summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+    margin-bottom: 24px;
+  }
+  .dim-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+  }
+  .dim-card .dim-name { font-size: 13px; color: var(--muted); margin-bottom: 6px; }
+  .dim-card .dim-verdict { font-size: 14px; font-weight: 600; }
+
+  section.dimension, section.reviewer-section { margin-bottom: 14px; }
+  section.dimension details, section.reviewer-section details {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+  section summary {
+    padding: 14px 20px;
+    cursor: pointer;
+    user-select: none;
+    list-style: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  section summary::-webkit-details-marker { display: none; }
+  section summary::before {
+    content: "▸";
+    display: inline-block;
+    color: var(--muted);
+    transition: transform 0.15s ease;
+  }
+  section details[open] summary::before { transform: rotate(90deg); }
+  section summary h2 {
+    display: inline;
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: -0.005em;
+    flex: 1;
+  }
+  .verdict-pill {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: white;
+  }
+  .verdict-strong { background: var(--verdict-strong); }
+  .verdict-adequate { background: var(--verdict-adequate); }
+  .verdict-thin { background: var(--verdict-thin); }
+  .verdict-broken { background: var(--verdict-broken); }
+
+  .dim-body { padding: 4px 20px 18px; }
+  .dim-judgment { color: var(--text); font-size: 14.5px; }
+  .dim-judgment p { margin: 0 0 10px; }
+
+  .findings-list { padding: 0 20px 4px; }
+  article.finding {
+    padding: 14px 0;
+    border-top: 1px solid var(--border);
+  }
+  article.finding:first-child { border-top: none; }
+  article.finding header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 6px;
+  }
+  .badge {
+    font-size: 10.5px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    line-height: 1.4;
+  }
+  .badge-sev-low { background: rgba(100, 116, 139, 0.12); color: var(--sev-low); }
+  .badge-sev-medium { background: rgba(202, 138, 4, 0.14); color: var(--sev-medium); }
+  .badge-sev-high { background: rgba(234, 88, 12, 0.14); color: var(--sev-high); }
+  .badge-sev-critical { background: rgba(220, 38, 38, 0.14); color: var(--sev-critical); }
+  .badge-resolved { background: rgba(22, 163, 74, 0.14); color: var(--verdict-strong); }
+  .finding-title { margin: 0; font-size: 15px; font-weight: 500; flex: 1; min-width: 200px; }
+  .finding-location { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; color: var(--muted); }
+  .finding-note, .finding-fix, .finding-resolution { margin-top: 6px; font-size: 14px; }
+  .finding-fix strong { color: var(--muted); font-weight: 500; }
+  .finding-resolution { color: var(--verdict-strong); }
+  .finding-resolution strong { color: var(--verdict-strong); font-weight: 600; }
+
+  .reviewer-source {
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+
+  table.contrast { width: 100%; border-collapse: collapse; margin: 8px 0 4px; font-size: 13.5px; }
+  table.contrast th, table.contrast td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  table.contrast th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
+  table.contrast code { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12.5px; }
+  .pass { color: var(--verdict-strong); font-weight: 600; }
+
+  .mechanical {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-top: 24px;
+    font-size: 14px;
+  }
+  .mechanical h3 { margin: 0 0 10px; font-size: 14px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+  .mechanical ul { margin: 0; padding-left: 20px; }
+  .mechanical li { margin-bottom: 4px; color: var(--text); }
+
+  footer.report-footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  }
+  footer .meta { display: flex; gap: 24px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+  <div class="container">
+
+    <header class="report-header">
+      <div class="title">
+        <h1>Soloist — UX Design Validation Report</h1>
+        <div class="subtitle">DESIGN.md · EXPERIENCE.md — Reviewer Gate at Finalize, 2026-06-06</div>
+      </div>
+      <span class="resolved-pill">Findings resolved · spines final</span>
+    </header>
+
+    <div class="synthesis">
+      <p><strong>Rubric walker — strong, extractable.</strong> A downstream consumer (architecture, story-dev) can source-extract the spine pair cleanly: every <code>{path.to.token}</code> reference resolves, all four UJs render as complete Key Flows (named protagonist, numbered steps, climax, failure path), section order is canonical, and the glossary is consistent across both spines and the sources. The one real weakness was component-coverage asymmetry — several EXPERIENCE.md behavioral rows lacked a DESIGN.md visual spec. Nothing was broken. <em>Counts as reviewed: 0 critical · 0 high · 4 medium · 12 low.</em></p>
+      <p><strong>Accessibility lens — sound default palette, risk concentrated in the runtime accent.</strong> All six fixed color pairs pass WCAG AA (Ink-on-Paper at a luxurious 16.42:1), and the spines earn credit for treating the contrast guard, color-independent status labels, and not-found-vs-denied as explicit load-bearing rules. The dominant residual risk was the runtime-variable Tenant accent, where the guard was specified in intent but not implementable detail (validated only white-on-accent). <em>Counts as reviewed: 2 critical · 4 high · 5 medium · 3 low.</em></p>
+      <p class="resolved"><strong>Resolution (2026-06-06 finalize pass).</strong> Both accessibility criticals (accent-as-link-text guard; 3:1 non-text floor with Ink focus-ring fallback), all four highs (email a11y clause; status-amber darkened <code>#B45309 → #92400E</code>; <code>aria-live="polite"</code> spec; ≥44px touch targets), and both rubric medium component gaps (Repo Connection card + curation-queue-row visual specs) were folded into the spines, along with the consolidated Accessibility Floor and the low-severity tidy-ups. Both spines are now <code>status: final</code>. This report preserves the review as conducted; the badges below are marked <strong>resolved</strong> where the fix is already in the spine.</p>
+    </div>
+
+    <div class="dimension-summary">
+      <div class="dim-card"><div class="dim-name">1. Flow coverage</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div></div>
+      <div class="dim-card"><div class="dim-name">2. Token completeness</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div></div>
+      <div class="dim-card"><div class="dim-name">3. Component coverage</div><div class="dim-verdict" style="color: var(--verdict-adequate)">Adequate → resolved</div></div>
+      <div class="dim-card"><div class="dim-name">4. State coverage</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div></div>
+      <div class="dim-card"><div class="dim-name">5. Visual reference coverage</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div></div>
+      <div class="dim-card"><div class="dim-name">6. Bloat &amp; overspecification</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong (lean)</div></div>
+      <div class="dim-card"><div class="dim-name">7. Inheritance discipline</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div></div>
+      <div class="dim-card"><div class="dim-name">8. Shape fit</div><div class="dim-verdict" style="color: var(--verdict-strong)">Strong</div></div>
+    </div>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>1. Flow coverage</h2><span class="verdict-pill verdict-strong">Strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>All four UJs (UJ-1..UJ-4) map 1:1 to Key Flows, each with named protagonist (CJ / Maya), numbered steps, an explicit Climax beat, and a non-trivial Failure path. Climaxes match the source-specified climaxes verbatim.</p></div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · low</span><h3 class="finding-title">Flow 4 title dropped the source em-dash</h3><span class="finding-location">EXPERIENCE.md › Key Flows</span></header>
+            <div class="finding-note">"...client-ready proof, and bills for it" vs source UJ-4 "...client-ready proof — and bills for it".</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> em-dash restored; UJ titles now verbatim across artifacts.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>2. Token completeness</h2><span class="verdict-pill verdict-strong">Strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>Every frontmatter token and every <code>{path.to.token}</code> reference across both files resolves. Every color carries a hex. The per-Tenant accent mechanism is fully specified. All load-bearing contrast combos independently computed as AA-passing.</p></div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · low</span><h3 class="finding-title">Measured contrast ratios not stated in the spine</h3><span class="finding-location">DESIGN.md › Colors</span></header>
+            <div class="finding-note">The guard mechanism was sound but no numeric ratio was written for static combos, forcing a consumer to re-derive them.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> default accent + all three status pairs now annotated with measured ratios in frontmatter and prose.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · low</span><h3 class="finding-title">Guard could only reject a pale accent, not flip foreground</h3><span class="finding-location">DESIGN.md › Colors; EXPERIENCE.md › Per-Tenant Branding</span></header>
+            <div class="finding-note">Foreground was fixed to white; a pale accent would be blocked with no dark-text fallback path.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> introduced a decoupled <code>tenant-accent-text</code> token that auto-darkens for link/inline text (see accessibility C-1).</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details open>
+        <summary><h2>3. Component coverage</h2><span class="verdict-pill verdict-adequate">Adequate → resolved</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>The shared core (Ship Update card, Status tag, Onboarding, Invoice, Candidate badge) is specified in both spines with real rules. The asymmetry: several EXPERIENCE.md behavioral rows had no dedicated DESIGN.md visual entry and weren't cleanly attributable to shadcn inheritance — the dimension's weak link, now closed.</p></div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · medium</span><h3 class="finding-title">Repo Connection card had four states but no DESIGN.md visual spec</h3><span class="finding-location">EXPERIENCE.md › Component Patterns</span></header>
+            <div class="finding-note">A four-state custom card (connected / pulling / error / disconnected) is not a plain shadcn primitive; consumers had no token/anatomy guidance for the error and pulling states.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> added a DESIGN.md Components entry mapping each state to a shadcn Badge/Alert/Spinner variant + tokens.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · medium</span><h3 class="finding-title">Curation queue row visual spec only implicit</h3><span class="finding-location">EXPERIENCE.md › Component Patterns</span></header>
+            <div class="finding-note">The Cockpit's primary work object had no DESIGN.md entry — only implicitly "a Ship Update card in edit mode." Edit-affordance and bulk-select chrome were unspecified.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> DESIGN.md now states the queue row = <code>ship-update-card</code> in edit mode + named shadcn inline-edit controls.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · low</span><h3 class="finding-title">Branding / Invite / Notification-center inheritance ambiguous</h3><span class="finding-location">EXPERIENCE.md › Component Patterns</span></header>
+            <div class="finding-note">"No visual spec" was ambiguous between "inherits shadcn" and "underspecified."</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> one DESIGN.md line confirms these compose from shadcn primitives as-is.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>4. State coverage</h2><span class="verdict-pill verdict-strong">Strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>Broad, intentionally designed coverage: cold-load skeletons, five distinct empties, error/degraded (GitHub failure banner + repo error, token revoked), not-found, invite-expired, optimistic-publish failure, live-update arrival. Permission-denied is correctly folded into not-found by design.</p></div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · low</span><h3 class="finding-title">Offline not addressed for a mobile-first surface</h3><span class="finding-location">EXPERIENCE.md › State Patterns</span></header>
+            <div class="finding-note">Sources mark offline "NOT MENTIONED," but a founder reading on flaky 4G is a real case worth a one-liner.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> added an offline/connection-lost row for the Client feed, making the omission a decision rather than a gap.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>5. Visual reference coverage</h2><span class="verdict-pill verdict-strong">Strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>At review time the mockups were forward-referenced with no broken links and spines-win-on-conflict stated three times. During this finalize pass the three hero mocks were rendered and promoted to <code>mockups/</code>, and the IA section now links each with a caption naming what it illustrates.</p></div></div>
+        <div class="findings-list"></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>6. Bloat &amp; overspecification</h2><span class="verdict-pill verdict-strong">Strong (lean)</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>EXPERIENCE.md carries zero pixel/hex literals — all visual values defer to DESIGN.md tokens. DESIGN.md's inline pixel annotations match frontmatter and are acceptable editorial readability. Editorial voice correctly partitioned: DESIGN.md carries it, EXPERIENCE.md stays operational.</p></div></div>
+        <div class="findings-list"></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>7. Inheritance discipline</h2><span class="verdict-pill verdict-strong">Strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>Sources frontmatter resolves to real directories. Glossary identical across both spines and sources. Component names identical across all sections in both files. EXPERIENCE.md token refs all resolve to DESIGN.md tokens by name. The one UJ-title punctuation drift (§1) is now fixed.</p></div></div>
+        <div class="findings-list"></div>
+      </details>
+    </section>
+
+    <section class="dimension">
+      <details>
+        <summary><h2>8. Shape fit</h2><span class="verdict-pill verdict-strong">Strong</span></summary>
+        <div class="dim-body"><div class="dim-judgment"><p>DESIGN.md sections in exact canonical order. EXPERIENCE.md has all required defaults plus the required-when-applicable Inspiration and Responsive sections. The two invented sections — Privacy &amp; Visibility and Per-Tenant Branding — clearly earn their place as load-bearing product mechanisms.</p></div></div>
+        <div class="findings-list"></div>
+      </details>
+    </section>
+
+    <section class="reviewer-section">
+      <details open>
+        <summary><h2>Accessibility review</h2><span class="reviewer-source">review-accessibility.md</span></summary>
+        <div class="dim-body"><div class="dim-judgment">
+          <p>Evaluated against the product's stated floor (NFR-7 baseline, not a formal WCAG 2.1 AA audit), calling out where the baseline→AA gap creates real consumer risk. The fixed default palette is accessibility-sound; the residual risk was concentrated entirely in the runtime-variable Tenant accent and a set of underspecified focus/route/form/touch behaviors — all now addressed in a consolidated Accessibility Floor.</p>
+          <table class="contrast">
+            <tr><th>Foreground</th><th>Background</th><th>Ratio</th><th>AA</th></tr>
+            <tr><td><code>Soloist Ink #1C1B1F</code></td><td><code>Warm Paper #FBFAF8</code></td><td>16.42:1</td><td class="pass">PASS</td></tr>
+            <tr><td><code>White #FFFFFF</code></td><td><code>Soloist Iris #5B5BD6</code></td><td>5.37:1</td><td class="pass">PASS</td></tr>
+            <tr><td><code>Iris #5B5BD6</code> as link text</td><td><code>Warm Paper #FBFAF8</code></td><td>5.15:1</td><td class="pass">PASS</td></tr>
+            <tr><td><code>status-shipped #15803D</code></td><td><code>#ECFDF3</code></td><td>4.76:1</td><td class="pass">PASS</td></tr>
+            <tr><td><code>status-progress #B45309</code> (was)</td><td><code>#FEF6E7</code></td><td>4.67:1 → darkened to #92400E</td><td class="pass">PASS+</td></tr>
+            <tr><td><code>status-next #475569</code></td><td><code>#F1F5F9</code></td><td>6.92:1</td><td class="pass">PASS</td></tr>
+            <tr><td><code>muted-foreground #6B6760</code></td><td><code>Warm Paper #FBFAF8</code></td><td>5.39:1</td><td class="pass">PASS</td></tr>
+          </table>
+        </div></div>
+        <div class="findings-list">
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · critical</span><h3 class="finding-title">C-1 — Guard validated only white-on-accent, not the accent used AS link text</h3><span class="finding-location">EXPERIENCE.md › Per-Tenant Branding</span></header>
+            <div class="finding-note">The accent is applied to links/active states (accent-as-text on Paper) — the inverse of what the guard checked. A pale brand could clear the button check yet render link text at ~2:1.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> guard now validates a decoupled <code>tenant-accent-text</code> token ≥4.5:1 on background and white, auto-darkening when a pale fill fails as text.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · critical</span><h3 class="finding-title">C-2 — No 3:1 non-text floor for accent focus rings / active states</h3><span class="finding-location">EXPERIENCE.md › Accessibility Floor</span></header>
+            <div class="finding-note">A pale Tenant accent used as the focus ring could drop below 3:1, making keyboard focus invisible with no "unreadable text" symptom to warn the Freelancer.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> explicit 3:1 non-text threshold added; guard checks accent-vs-background, and the focus ring falls back to Soloist Ink when it fails.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · high</span><h3 class="finding-title">H-1 — Branded email accessibility unspecified</h3><span class="finding-location">EXPERIENCE.md › Per-Tenant Branding</span></header>
+            <div class="finding-note">The day-one "wow" arrives by email; logo alt, images-off degradation, dark-mode inversion, and heading structure were undefined.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> added an email-accessibility clause (logo alt rule, emoji+label survives images-off, pinned inline backgrounds, ≥14px body, semantic headings).</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · high</span><h3 class="finding-title">H-2 — Status tint pairs passed AA with almost no margin</h3><span class="finding-location">DESIGN.md › Colors</span></header>
+            <div class="finding-note">Shipped 4.76 and In Progress 4.67 sat on the line for small pill text.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> amber darkened <code>#B45309 → #92400E</code> (5.93:1); all three ratios now documented in the spine.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · high</span><h3 class="finding-title">H-3 — Live-feed aria-live unspecified (politeness, scope, poll branch)</h3><span class="finding-location">EXPERIENCE.md › Accessibility Floor / State Patterns</span></header>
+            <div class="finding-note">"Use aria-live" without polite/assertive, announced string, or the poll-branch story is not implementable.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> specified <code>aria-live="polite"</code> with a concise summary, no focus move on insert, and the "Load new updates" control as the announced element on the poll branch.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · high</span><h3 class="finding-title">H-4 — No touch-target minimum on a mobile-first surface</h3><span class="finding-location">EXPERIENCE.md › Accessibility Floor</span></header>
+            <div class="finding-note">"Thumb-reachable" addressed reach, not size; shadcn icon buttons default to ~36px.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> ≥44px hit area for Client Portal controls, ≥24px hard floor for Cockpit.</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · medium ×5</span><h3 class="finding-title">M-1..M-5 — Shortcuts-while-typing, focus trap/return, route announcement, form a11y, logo alt</h3><span class="finding-location">EXPERIENCE.md › Accessibility Floor / Interaction Primitives</span></header>
+            <div class="finding-note">Single-key shortcuts firing mid-edit; overlay focus trap/return unstated; SPA route changes silent to AT; form label/error semantics undefined; logo alt rule only covered the hero.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> all five folded into the consolidated Accessibility Floor (shortcuts suppressed in inputs + visible-control parity + <code>?</code> overlay; focus trap/return; route focus-to-h1; forms clause; one logo-alt rule).</div>
+          </article>
+          <article class="finding">
+            <header><span class="badge badge-resolved">Resolved · low ×3</span><h3 class="finding-title">L-1..L-3 — Reduced-motion, threshold-split naming, not-found AT semantics</h3><span class="finding-location">EXPERIENCE.md › Accessibility Floor / State Patterns</span></header>
+            <div class="finding-note">Reduced-motion for card insertion; naming the 4.5/3.0 split; not-found focused-h1 with no role=alert interruption.</div>
+            <div class="finding-resolution"><strong>Resolved:</strong> all three stated in the Accessibility Floor.</div>
+          </article>
+        </div>
+      </details>
+    </section>
+
+    <div class="mechanical">
+      <h3>Mechanical notes</h3>
+      <ul>
+        <li>Both spines promoted <code>status: draft → final</code>, <code>updated: 2026-06-06</code> (resolves the rubric's draft/finalize mismatch note).</li>
+        <li>Stale <code>[ASSUMPTION: default hue]</code> and <code>[ASSUMPTION: radius scale]</code> tags cleared to ✓ Confirmed (they contradicted the confirmed-decision header).</li>
+        <li>Editorial polish pass applied (6 mechanical fixes: AA-spacing, entity capitalization, comma-splice, banner/voice copy alignment, list parallelism). No decision, token, or <code>{path.to.token}</code> reference altered.</li>
+        <li>All <code>{path.to.token}</code> references verified resolving; cross-spine section pointers point to sections that exist.</li>
+        <li>Remaining <code>[OPEN]</code> items (real-time-vs-poll feed, notification-center grouping, Invoice export format, public demo portal, Account/settings detail, Cockpit host domain) are PRD-deferred and non-blocking — appropriately tagged, not defects.</li>
+      </ul>
+    </div>
+
+    <footer class="report-footer">
+      <div class="meta">
+        <span>Rubric: review-rubric.md</span>
+        <span>Accessibility: review-accessibility.md</span>
+        <span>Generated: 2026-06-06</span>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

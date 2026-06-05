@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soloist — Client Portal Ship Feed (CJ's Workspace)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,450;9..144,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================================
+   GOVERNED BY (spine = contract; this mock illustrates):
+   EXPERIENCE.md › Information Architecture › Client Portal (Ship Feed = home)
+   EXPERIENCE.md › Component Patterns › "Ship Update card", "Status tag"
+   EXPERIENCE.md › State Patterns › "Empty — pre-first-publish" (2nd phone)
+   EXPERIENCE.md › Key Flows › Flow 2 climax (✅/🚧 first thing Maya sees)
+   EXPERIENCE.md › Voice and Tone (plain-English, momentum-positive, honest)
+   DESIGN.md › Components › "Ship Update card", "Status tag", "Button — tenant"
+   DESIGN.md › Per-Tenant Branding (Tenant = CJ; Iris accent, monogram logo)
+   DESIGN.md › Typography (Fraunces display moments; mono timestamps)
+   ========================================================================== */
+
+:root {
+  /* Warm-neutral base — DESIGN.md › Colors */
+  --paper:        #FBFAF8;   /* Warm Paper background */
+  --ink:          #1C1B1F;   /* Soloist Ink text */
+  --muted:        #6B6760;   /* warm muted-foreground */
+  --border:       #EAE7E1;   /* warm hairline */
+
+  /* Per-Tenant accent (Tenant = CJ, not customized → Soloist Iris) */
+  --accent:       #5B5BD6;   /* Soloist Iris */
+  --accent-fg:    #FFFFFF;
+  --accent-soft:  #EEEEFB;   /* Iris tint for the monogram chip */
+
+  /* Fixed status vocabulary — never per-Tenant */
+  --shipped:      #15803D;  --shipped-bg:  #ECFDF3;
+  --progress:     #B45309;  --progress-bg: #FEF6E7;
+  --next:         #475569;  --next-bg:     #F1F5F9;
+
+  /* Radii — DESIGN.md › Shapes */
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-full: 9999px;
+
+  --sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --serif: 'Fraunces', Georgia, serif;       /* display moments only */
+  --mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  background:
+    radial-gradient(1200px 600px at 20% -10%, #F3F1ED 0%, transparent 60%),
+    radial-gradient(1000px 500px at 90% 110%, #F1EFEA 0%, transparent 55%),
+    #F6F4F0;
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  padding: 56px 32px;
+}
+
+.stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 64px;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+.caption {
+  text-align: center;
+  margin-top: 22px;
+  max-width: 320px;
+}
+.caption .label {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.caption .desc {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.5;
+  margin-top: 6px;
+}
+
+/* ---- Phone frame -------------------------------------------------------- */
+.phone {
+  width: 390px;
+  height: 844px;
+  background: #0A0A0B;
+  border-radius: 54px;
+  padding: 13px;
+  box-shadow:
+    0 2px 4px rgba(28,27,31,0.04),
+    0 30px 60px -20px rgba(28,27,31,0.30),
+    0 8px 24px -8px rgba(28,27,31,0.18);
+  position: relative;
+}
+.phone::after { /* side button */
+  content: ""; position: absolute; right: -2px; top: 200px;
+  width: 3px; height: 64px; background: #0A0A0B; border-radius: 2px;
+}
+.screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--paper);
+  border-radius: 42px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.notch {
+  position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+  width: 124px; height: 32px; background: #0A0A0B;
+  border-radius: 0 0 18px 18px; z-index: 40;
+}
+.statusbar {
+  height: 52px; flex: 0 0 52px;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 28px 0 30px;
+  font-family: var(--mono); font-size: 14px; font-weight: 500;
+  color: var(--ink);
+}
+.statusbar .glyphs { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+
+/* ---- Tenant header ------------------------------------------------------ */
+.app-header {
+  flex: 0 0 auto;
+  padding: 6px 20px 16px;          /* portal-gutter 20px */
+  border-bottom: 1px solid var(--border);
+  background: var(--paper);
+}
+.brand-row { display: flex; align-items: center; gap: 11px; }
+.monogram {
+  width: 34px; height: 34px; border-radius: var(--r-md);
+  background: var(--accent); color: var(--accent-fg);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 500; font-size: 17px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 1px 2px rgba(91,91,214,0.35);
+}
+.brand-meta .ws-name {
+  font-family: var(--serif); font-weight: 450; font-size: 19px;
+  line-height: 1.1; letter-spacing: -0.01em; color: var(--ink);
+}
+.brand-meta .ws-sub {
+  font-size: 12px; color: var(--muted); margin-top: 2px;
+}
+.feed-title {
+  font-family: var(--serif); font-weight: 450; font-size: 27px;
+  line-height: 1.12; letter-spacing: -0.01em; color: var(--ink);
+  margin-top: 18px;
+}
+.feed-title-sub {
+  font-size: 13px; color: var(--muted); margin-top: 5px;
+}
+
+/* ---- Feed --------------------------------------------------------------- */
+.feed {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  padding: 18px 20px 24px;          /* portal-gutter */
+  display: flex; flex-direction: column;
+  gap: 16px;                        /* feed-gap */
+}
+.feed::-webkit-scrollbar { width: 0; }
+
+.day-rule {
+  display: flex; align-items: center; gap: 12px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted);
+  margin: 4px 2px -2px;
+}
+.day-rule::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+/* Ship Update card — DESIGN.md › Components › ship-update-card */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  padding: 16px 17px 17px;
+  box-shadow: 0 1px 2px rgba(28,27,31,0.05), 0 2px 8px -4px rgba(28,27,31,0.06);
+  transition: box-shadow .18s ease, transform .18s ease;
+}
+.card:hover {
+  box-shadow: 0 2px 4px rgba(28,27,31,0.06), 0 12px 26px -12px rgba(28,27,31,0.14);
+  transform: translateY(-1px);
+}
+
+/* Status tag — emoji + text label always (a11y: never color alone) */
+.tag {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--r-full);
+  padding: 4px 11px 4px 9px;
+  font-size: 12px; font-weight: 600; letter-spacing: 0.005em;
+  line-height: 1;
+}
+.tag .emoji { font-size: 12px; }
+.tag.shipped  { background: var(--shipped-bg);  color: var(--shipped); }
+.tag.progress { background: var(--progress-bg); color: var(--progress); }
+.tag.next     { background: var(--next-bg);     color: var(--next); }
+
+.card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+}
+.timestamp {
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+  white-space: nowrap;
+}
+.card-title {
+  font-size: 16.5px; font-weight: 600; line-height: 1.3;
+  letter-spacing: -0.005em; color: var(--ink);
+  margin: 12px 0 5px;
+}
+.card-summary {
+  font-size: 14px; line-height: 1.5; color: var(--muted);
+}
+
+/* ---- Bottom nav --------------------------------------------------------- */
+.nav {
+  flex: 0 0 auto;
+  height: 76px;
+  border-top: 1px solid var(--border);
+  background: rgba(251,250,248,0.92);
+  backdrop-filter: blur(8px);
+  display: flex; align-items: center; justify-content: space-around;
+  padding: 0 14px 16px;
+}
+.nav-item {
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  color: var(--muted); position: relative;
+  font-size: 10.5px; font-weight: 500; letter-spacing: 0.01em;
+}
+.nav-item.active { color: var(--accent); }
+.nav-item svg { width: 23px; height: 23px; }
+.nav-dot {
+  position: absolute; top: -2px; right: 6px;
+  width: 8px; height: 8px; border-radius: var(--r-full);
+  background: var(--accent); border: 2px solid var(--paper);
+}
+.nav-avatar {
+  width: 25px; height: 25px; border-radius: var(--r-full);
+  background: linear-gradient(135deg, #C9A36B, #9C7A4D);
+  color: #fff; display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 600;
+}
+
+/* ---- Empty state (2nd phone) -------------------------------------------- */
+.empty {
+  flex: 1 1 auto;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center; padding: 32px 36px 90px; gap: 16px;
+}
+.empty .mono-chip {
+  width: 56px; height: 56px; border-radius: var(--r-lg);
+  background: var(--accent-soft); color: var(--accent);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 500; font-size: 24px;
+  margin-bottom: 4px;
+}
+.empty h2 {
+  font-family: var(--serif); font-weight: 450; font-size: 24px;
+  line-height: 1.18; letter-spacing: -0.01em; color: var(--ink);
+}
+.empty p {
+  font-size: 14.5px; line-height: 1.55; color: var(--muted); max-width: 250px;
+}
+.empty .pulse {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--muted); margin-top: 6px;
+}
+.empty .pulse::before {
+  content: ""; width: 7px; height: 7px; border-radius: var(--r-full);
+  background: var(--accent); box-shadow: 0 0 0 0 rgba(91,91,214,0.5);
+  animation: ping 1.8s ease-out infinite;
+}
+@keyframes ping {
+  0%   { box-shadow: 0 0 0 0 rgba(91,91,214,0.45); }
+  70%  { box-shadow: 0 0 0 9px rgba(91,91,214,0); }
+  100% { box-shadow: 0 0 0 0 rgba(91,91,214,0); }
+}
+
+.frame-label {
+  text-align: center; font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 18px;
+}
+</style>
+</head>
+<body>
+  <div class="stage">
+
+    <!-- ===================== PHONE 1 — LIVE SHIP FEED ===================== -->
+    <div>
+      <div class="frame-label">Ship Feed · live</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar">
+            <span>9:41</span>
+            <span class="glyphs">&#9909;&nbsp; &#9728; &nbsp;&#9646;&#9646;&#9646;&#9646;</span>
+          </div>
+
+          <!-- Tenant-branded header -->
+          <header class="app-header">
+            <div class="brand-row">
+              <div class="monogram">CJ</div>
+              <div class="brand-meta">
+                <div class="ws-name">CJ&rsquo;s Workspace</div>
+                <div class="ws-sub">Acme &middot; building for Maya</div>
+              </div>
+            </div>
+            <h1 class="feed-title">Your updates</h1>
+            <p class="feed-title-sub">What CJ has been building &mdash; newest first.</p>
+          </header>
+
+          <!-- Feed -->
+          <div class="feed">
+            <div class="day-rule">Today</div>
+
+            <!-- ✅ Shipped · 2 hours ago -->
+            <article class="card">
+              <div class="card-head">
+                <span class="tag shipped"><span class="emoji">&#9989;</span>Shipped</span>
+                <span class="timestamp">2 hours ago</span>
+              </div>
+              <h3 class="card-title">Shipped the onboarding flow</h3>
+              <p class="card-summary">New clients now land in a guided welcome instead of a blank screen.</p>
+            </article>
+
+            <!-- 🚧 In Progress · 5 hours ago -->
+            <article class="card">
+              <div class="card-head">
+                <span class="tag progress"><span class="emoji">&#128679;</span>In&nbsp;Progress</span>
+                <span class="timestamp">5 hours ago</span>
+              </div>
+              <h3 class="card-title">Building your dashboard</h3>
+              <p class="card-summary">Your main metrics view is taking shape &mdash; charts and recent activity.</p>
+            </article>
+
+            <div class="day-rule">Yesterday</div>
+
+            <!-- ✅ Shipped · Yesterday -->
+            <article class="card">
+              <div class="card-head">
+                <span class="tag shipped"><span class="emoji">&#9989;</span>Shipped</span>
+                <span class="timestamp">Yesterday</span>
+              </div>
+              <h3 class="card-title">Set up the authentication system</h3>
+              <p class="card-summary">Secure sign-in and accounts are live and tested.</p>
+            </article>
+
+            <div class="day-rule">Coming up</div>
+
+            <!-- 📦 Next -->
+            <article class="card">
+              <div class="card-head">
+                <span class="tag next"><span class="emoji">&#128230;</span>Next</span>
+                <span class="timestamp">&mdash;</span>
+              </div>
+              <h3 class="card-title">Payment integration</h3>
+              <p class="card-summary">Wiring up payments so you can start charging customers.</p>
+            </article>
+          </div>
+
+          <!-- Bottom nav: Updates · Documents · bell+dot · avatar -->
+          <nav class="nav">
+            <a class="nav-item active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              Updates
+            </a>
+            <a class="nav-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+              Documents
+            </a>
+            <a class="nav-item">
+              <span class="nav-dot"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+              Alerts
+            </a>
+            <a class="nav-item">
+              <span class="nav-avatar">M</span>
+              Maya
+            </a>
+          </nav>
+        </div>
+      </div>
+      <div class="caption">
+        <div class="label">Tenant-branded · hero surface</div>
+        <div class="desc">CJ&rsquo;s Iris accent + monogram; plain-English status feed Maya reads on her phone.</div>
+      </div>
+    </div>
+
+    <!-- =============== PHONE 2 — EMPTY PRE-FIRST-PUBLISH ================== -->
+    <div>
+      <div class="frame-label">Ship Feed · pre-first-publish</div>
+      <div class="phone">
+        <div class="screen">
+          <div class="notch"></div>
+          <div class="statusbar">
+            <span>9:41</span>
+            <span class="glyphs">&#9909;&nbsp; &#9728; &nbsp;&#9646;&#9646;&#9646;&#9646;</span>
+          </div>
+
+          <header class="app-header">
+            <div class="brand-row">
+              <div class="monogram">CJ</div>
+              <div class="brand-meta">
+                <div class="ws-name">CJ&rsquo;s Workspace</div>
+                <div class="ws-sub">Acme &middot; building for Maya</div>
+              </div>
+            </div>
+            <h1 class="feed-title">Your updates</h1>
+            <p class="feed-title-sub">What CJ has been building &mdash; newest first.</p>
+          </header>
+
+          <div class="empty">
+            <div class="mono-chip">CJ</div>
+            <h2>CJ is getting set up.</h2>
+            <p>Your first update will land here soon.</p>
+            <span class="pulse">Listening for the first ship</span>
+          </div>
+
+          <nav class="nav">
+            <a class="nav-item active">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
+              Updates
+            </a>
+            <a class="nav-item">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>
+              Documents
+            </a>
+            <a class="nav-item">
+              <span class="nav-dot"></span>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+              Alerts
+            </a>
+            <a class="nav-item">
+              <span class="nav-avatar">M</span>
+              Maya
+            </a>
+          </nav>
+        </div>
+      </div>
+      <div class="caption">
+        <div class="label">State: empty — pre-first-publish</div>
+        <div class="desc">Calm, branded reassurance instead of &ldquo;no data&rdquo; &mdash; the most-seen day-one state.</div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

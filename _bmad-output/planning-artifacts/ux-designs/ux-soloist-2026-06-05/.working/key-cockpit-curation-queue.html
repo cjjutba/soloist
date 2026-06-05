@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Soloist — Cockpit Curation Queue (Maya · Acme)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,450;9..144,500&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+/* ============================================================================
+   GOVERNED BY (spine = contract; this mock illustrates):
+   EXPERIENCE.md › Information Architecture › Cockpit (Engagement detail / queue)
+   EXPERIENCE.md › Component Patterns › "Curation queue row", "Status tag",
+                   "Engagement row" (candidate-badge), "Repo Connection card"
+   EXPERIENCE.md › Interaction Primitives › Cockpit (inline-edit, dismiss noise,
+                   deliberate single-click Publish across the privacy boundary)
+   EXPERIENCE.md › Key Flows › Flow 4 step 2 (plain-English retitle, dismiss noise,
+                   set status, publish)
+   DESIGN.md › Components › "Button — primary" (Soloist Ink), "candidate-badge"
+                   (Soloist Iris — Cockpit is Soloist-branded, NOT Tenant-branded)
+   DESIGN.md › Elevation (flat Cockpit tables, hairline separation)
+   Anti-reference: "cluttered PM dashboard" — dense but calm.
+   ========================================================================== */
+
+:root {
+  --paper:        #FBFAF8;
+  --ink:          #1C1B1F;   /* Soloist Ink — Cockpit primary */
+  --ink-fg:       #FBFAF8;
+  --muted:        #6B6760;
+  --border:       #EAE7E1;
+
+  /* Iris appears in the Cockpit ONLY as Soloist's candidate-count badge */
+  --iris:         #5B5BD6;
+  --iris-fg:      #FFFFFF;
+  --iris-soft:    #EEEEFB;
+
+  --shipped:      #15803D;  --shipped-bg:  #ECFDF3;
+  --progress:     #B45309;  --progress-bg: #FEF6E7;
+  --next:         #475569;  --next-bg:     #F1F5F9;
+
+  --r-sm: 6px; --r-md: 10px; --r-lg: 14px; --r-xl: 20px; --r-full: 9999px;
+
+  --sans: 'Geist', system-ui, -apple-system, sans-serif;
+  --serif: 'Fraunces', Georgia, serif;
+  --mono: 'Geist Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: var(--sans);
+  background:
+    radial-gradient(1400px 700px at 15% -10%, #F0EEE9 0%, transparent 55%),
+    #ECEAE5;
+  color: var(--ink);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  display: flex; flex-direction: column; align-items: center;
+  padding: 48px 32px;
+}
+
+.frame-label {
+  font-family: var(--mono); font-size: 11px;
+  letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted);
+  margin-bottom: 16px;
+}
+
+/* ---- Browser frame ------------------------------------------------------ */
+.browser {
+  width: 1180px; max-width: 100%;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--paper);
+  box-shadow:
+    0 2px 4px rgba(28,27,31,0.05),
+    0 40px 80px -28px rgba(28,27,31,0.32),
+    0 12px 32px -12px rgba(28,27,31,0.16);
+  border: 1px solid var(--border);
+}
+.chrome {
+  height: 44px;
+  background: #F1EFEA;
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 16px;
+  padding: 0 16px;
+}
+.dots { display: flex; gap: 8px; }
+.dots span { width: 12px; height: 12px; border-radius: 50%; display: block; }
+.dots .r { background: #ED6A5E; } .dots .y { background: #F4BF4F; } .dots .g { background: #61C554; }
+.urlbar {
+  flex: 1; max-width: 460px;
+  height: 26px; border-radius: var(--r-full);
+  background: var(--paper); border: 1px solid var(--border);
+  display: flex; align-items: center; gap: 7px; padding: 0 12px;
+  font-family: var(--mono); font-size: 12px; color: var(--muted);
+}
+.urlbar svg { width: 12px; height: 12px; color: var(--shipped); }
+
+.app { display: flex; min-height: 720px; }
+
+/* ---- Sidebar (Soloist-branded) ----------------------------------------- */
+.sidebar {
+  flex: 0 0 232px;
+  background: #F6F4F0;
+  border-right: 1px solid var(--border);
+  padding: 22px 16px;
+  display: flex; flex-direction: column;
+}
+.wordmark {
+  display: flex; align-items: center; gap: 9px;
+  padding: 0 8px 4px;
+}
+.wordmark .mark {
+  width: 28px; height: 28px; border-radius: var(--r-md);
+  background: var(--ink); color: var(--ink-fg);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--serif); font-weight: 500; font-size: 16px;
+}
+.wordmark .name {
+  font-family: var(--serif); font-weight: 500; font-size: 18px;
+  letter-spacing: -0.01em; color: var(--ink);
+}
+.nav {
+  margin-top: 24px; display: flex; flex-direction: column; gap: 2px;
+}
+.nav-section {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em;
+  text-transform: uppercase; color: var(--muted);
+  padding: 8px 10px 6px;
+}
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: var(--r-md);
+  font-size: 14px; font-weight: 500; color: var(--muted);
+  text-decoration: none; cursor: pointer;
+}
+.nav-item svg { width: 17px; height: 17px; }
+.nav-item.active {
+  background: var(--ink); color: var(--ink-fg);
+  box-shadow: 0 1px 2px rgba(28,27,31,0.18);
+}
+.nav-item:not(.active):hover { background: #EDEAE4; color: var(--ink); }
+.nav-count {
+  margin-left: auto;
+  font-family: var(--mono); font-size: 11px; font-weight: 500;
+  background: var(--iris); color: var(--iris-fg);
+  border-radius: var(--r-full); padding: 1px 7px;
+}
+.sidebar-foot {
+  margin-top: auto; padding: 12px 10px 0;
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; gap: 10px;
+}
+.sidebar-foot .av {
+  width: 28px; height: 28px; border-radius: var(--r-full);
+  background: var(--ink); color: var(--ink-fg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 600;
+}
+.sidebar-foot .who { line-height: 1.25; }
+.sidebar-foot .who b { font-size: 13px; font-weight: 600; }
+.sidebar-foot .who span { font-size: 11px; color: var(--muted); display: block; }
+
+/* ---- Main working surface ---------------------------------------------- */
+.main { flex: 1 1 auto; padding: 26px 24px 30px; }   /* cockpit-gutter 24px */
+
+.crumbs {
+  font-size: 12.5px; color: var(--muted); margin-bottom: 14px;
+}
+.crumbs b { color: var(--ink); font-weight: 500; }
+
+.eng-head {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.eng-title {
+  font-family: var(--serif); font-weight: 450; font-size: 26px;
+  letter-spacing: -0.01em; line-height: 1.1; color: var(--ink);
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 600; border-radius: var(--r-full);
+  padding: 4px 10px 4px 9px;
+}
+.chip.active {
+  background: var(--shipped-bg); color: var(--shipped);
+}
+.chip.active .led {
+  width: 7px; height: 7px; border-radius: var(--r-full); background: var(--shipped);
+}
+/* candidate-count badge — Soloist Iris pill */
+.badge-curate {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--iris); color: var(--iris-fg);
+  font-size: 12px; font-weight: 600; border-radius: var(--r-full);
+  padding: 4px 11px;
+}
+.badge-curate .n { font-family: var(--mono); }
+
+/* ---- Tabs --------------------------------------------------------------- */
+.tabs {
+  display: flex; gap: 4px; margin: 22px 0 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab {
+  padding: 10px 14px 12px; font-size: 13.5px; font-weight: 500;
+  color: var(--muted); cursor: pointer; position: relative;
+}
+.tab.active { color: var(--ink); font-weight: 600; }
+.tab.active::after {
+  content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px;
+  height: 2px; background: var(--ink); border-radius: 2px;
+}
+
+/* ---- Repo indicator + toolbar ------------------------------------------ */
+.queue-bar {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 18px 0 14px;
+}
+.repo-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 12.5px; color: var(--muted);
+}
+.repo-pill .led {
+  width: 7px; height: 7px; border-radius: var(--r-full);
+  background: var(--shipped); box-shadow: 0 0 0 3px var(--shipped-bg);
+}
+.repo-pill svg { width: 14px; height: 14px; }
+.repo-pill .pull { font-family: var(--mono); }
+.queue-meta {
+  font-size: 12.5px; color: var(--muted);
+}
+.queue-meta b { color: var(--ink); font-weight: 600; }
+
+/* ---- Curation rows (flat table, hairline separation) ------------------- */
+.queue {
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  background: var(--paper);
+}
+.row {
+  display: grid;
+  grid-template-columns: 132px 1fr 246px;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border);
+  align-items: start;
+}
+.row:last-child { border-bottom: none; }
+.row:hover { background: #FAF8F4; }
+.row.editing { background: #F7F6FB; box-shadow: inset 3px 0 0 var(--iris); }
+.row.noise { background: #FBFAF8; }
+.row.noise:hover { background: #F9F7F3; }
+
+/* status control (cycle ✅/🚧/📦) */
+.status-ctl {
+  display: inline-flex; align-items: center; gap: 6px;
+  border-radius: var(--r-full); padding: 5px 11px 5px 9px;
+  font-size: 12px; font-weight: 600; cursor: pointer;
+  border: 1px solid transparent; white-space: nowrap;
+}
+.status-ctl .caret { opacity: .5; margin-left: 1px; }
+.status-ctl .caret svg { width: 11px; height: 11px; display: block; }
+.status-ctl.shipped  { background: var(--shipped-bg);  color: var(--shipped); }
+.status-ctl.progress { background: var(--progress-bg); color: var(--progress); }
+.status-ctl.next     { background: var(--next-bg);     color: var(--next); }
+
+.cell-body { min-width: 0; }
+.row-title {
+  font-size: 15px; font-weight: 600; line-height: 1.3;
+  letter-spacing: -0.005em; color: var(--ink);
+}
+.row-summary {
+  font-size: 13.5px; line-height: 1.45; color: var(--muted); margin-top: 4px;
+}
+.row-source {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 11px; color: var(--muted);
+  margin-top: 9px;
+}
+.row-source svg { width: 12px; height: 12px; }
+.row-source .src-strong { color: #57534E; }
+
+/* inline-edit fields */
+.edit-title {
+  width: 100%; font-family: var(--sans);
+  font-size: 15px; font-weight: 600; color: var(--ink);
+  border: 1px solid var(--iris); border-radius: var(--r-sm);
+  padding: 8px 10px; background: #fff;
+  box-shadow: 0 0 0 3px rgba(91,91,214,0.12);
+  outline: none;
+}
+.edit-summary {
+  width: 100%; font-family: var(--sans);
+  font-size: 13.5px; line-height: 1.45; color: var(--ink);
+  border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 8px 10px; background: #fff; margin-top: 8px;
+  resize: none; outline: none;
+}
+.edit-hint {
+  font-family: var(--mono); font-size: 10.5px; color: var(--muted);
+  margin-top: 7px; display: flex; align-items: center; gap: 8px;
+}
+.edit-hint kbd {
+  font-family: var(--mono); font-size: 10px;
+  background: #F1EFEA; border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; color: #57534E;
+}
+
+/* actions */
+.actions {
+  display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  flex-wrap: wrap;
+}
+.btn {
+  font-family: var(--sans); font-size: 12.5px; font-weight: 500;
+  border-radius: var(--r-md); padding: 7px 12px; cursor: pointer;
+  border: 1px solid var(--border); background: var(--paper); color: var(--ink);
+  display: inline-flex; align-items: center; gap: 6px;
+  transition: background .12s ease, border-color .12s ease;
+}
+.btn:hover { background: #F3F1EC; }
+.btn svg { width: 13px; height: 13px; }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: #F3F1EC; color: var(--ink); }
+/* dark Soloist-Ink Publish — deliberate privacy-boundary commit */
+.btn.publish {
+  background: var(--ink); color: var(--ink-fg); border-color: var(--ink);
+  font-weight: 600;
+  box-shadow: 0 1px 2px rgba(28,27,31,0.20);
+}
+.btn.publish:hover { background: #2A282E; }
+/* noise row: quiet Dismiss emphasis */
+.btn.dismiss-emph {
+  border-color: var(--border); color: #57534E; font-weight: 600;
+}
+.btn.dismiss-emph:hover { background: #F1EFEA; }
+
+.noise-flag {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--muted);
+  margin-top: 9px;
+}
+.noise-flag svg { width: 12px; height: 12px; }
+
+.editing-flag {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-family: var(--mono); font-size: 10.5px; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--iris);
+  margin-bottom: 9px;
+}
+.editing-flag svg { width: 12px; height: 12px; }
+
+.queue-foot {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 14px; font-size: 12px; color: var(--muted);
+}
+.queue-foot kbd {
+  font-family: var(--mono); font-size: 10.5px;
+  background: #F1EFEA; border: 1px solid var(--border);
+  border-radius: 4px; padding: 1px 5px; color: #57534E;
+}
+
+.caption {
+  text-align: center; margin-top: 22px; max-width: 720px;
+}
+.caption .label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--muted);
+}
+.caption .desc {
+  font-size: 13px; color: var(--muted); line-height: 1.5; margin-top: 6px;
+}
+</style>
+</head>
+<body>
+  <div class="frame-label">Cockpit · curation queue (Soloist-branded)</div>
+
+  <div class="browser">
+    <!-- Browser chrome -->
+    <div class="chrome">
+      <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+      <div class="urlbar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V8a5 5 0 0 1 10 0v3"/></svg>
+        app.cjjutba.com/engagements/acme/ship-feed
+      </div>
+    </div>
+
+    <div class="app">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="wordmark">
+          <span class="mark">S</span>
+          <span class="name">Soloist</span>
+        </div>
+
+        <nav class="nav">
+          <div class="nav-section">Workspace</div>
+          <a class="nav-item active">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/></svg>
+            Engagements
+            <span class="nav-count">3</span>
+          </a>
+          <a class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 0 1-4 0v-.1a1.6 1.6 0 0 0-2.7-1.1l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H3a2 2 0 0 1 0-4h.1a1.6 1.6 0 0 0 1.1-2.7l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H9a1.6 1.6 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V9a1.6 1.6 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg>
+            Settings
+          </a>
+          <a class="nav-item">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg>
+            Account
+          </a>
+        </nav>
+
+        <div class="sidebar-foot">
+          <span class="av">CJ</span>
+          <span class="who"><b>CJ Jutba</b><span>cjjutba.com</span></span>
+        </div>
+      </aside>
+
+      <!-- Main -->
+      <main class="main">
+        <div class="crumbs">Engagements &nbsp;/&nbsp; <b>Maya &middot; Acme</b></div>
+
+        <div class="eng-head">
+          <h1 class="eng-title">Maya &middot; Acme</h1>
+          <span class="chip active"><span class="led"></span>Active</span>
+          <span class="badge-curate"><span class="n">3</span> need curation</span>
+        </div>
+
+        <!-- Tabs -->
+        <nav class="tabs">
+          <span class="tab active">Ship Feed</span>
+          <span class="tab">Repo Connections</span>
+          <span class="tab">Client</span>
+          <span class="tab">Documents</span>
+        </nav>
+
+        <!-- Repo indicator + queue meta -->
+        <div class="queue-bar">
+          <span class="repo-pill">
+            <span class="led"></span>
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2A10 10 0 0 0 8.8 21.5c.5.1.7-.2.7-.5v-1.7c-2.8.6-3.4-1.3-3.4-1.3-.5-1.2-1.1-1.5-1.1-1.5-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.2-.3-4.6-1.1-4.6-5 0-1.1.4-2 1-2.7-.1-.3-.4-1.3.1-2.7 0 0 .8-.3 2.7 1a9.4 9.4 0 0 1 5 0c1.9-1.3 2.7-1 2.7-1 .5 1.4.2 2.4.1 2.7.6.7 1 1.6 1 2.7 0 3.9-2.4 4.7-4.6 5 .3.3.7 1 .7 2v3c0 .3.2.6.7.5A10 10 0 0 0 12 2z"/></svg>
+            Repo connected &middot; last pull <span class="pull">2m ago</span>
+          </span>
+          <span class="queue-meta"><b>3</b> candidates &middot; auto-pulled from GitHub</span>
+        </div>
+
+        <!-- Queue -->
+        <div class="queue">
+
+          <!-- ROW 1 — INLINE-EDIT STATE (🚧 In Progress) -->
+          <div class="row editing">
+            <div>
+              <span class="status-ctl progress">
+                <span>&#128679;</span> In Progress
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+              </span>
+            </div>
+            <div class="cell-body">
+              <div class="editing-flag">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                Editing
+              </div>
+              <input class="edit-title" value="Made sign-in faster and more reliable" aria-label="Edit update title" />
+              <textarea class="edit-summary" rows="2" aria-label="Edit update summary">Reworked the login flow for speed and reliability.</textarea>
+              <div class="edit-hint">
+                <span>Click out to save</span>
+                <span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> status</span>
+                <span><kbd>P</kbd> publish</span>
+                <span><kbd>Esc</kbd> cancel</span>
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn ghost">Dismiss</button>
+              <button class="btn publish">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                Publish
+              </button>
+            </div>
+          </div>
+
+          <!-- ROW 2 — ✅ Shipped -->
+          <div class="row">
+            <div>
+              <span class="status-ctl shipped">
+                <span>&#9989;</span> Shipped
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+              </span>
+            </div>
+            <div class="cell-body">
+              <div class="row-title">Shipped the onboarding flow</div>
+              <div class="row-summary">New clients land in a guided welcome.</div>
+              <div class="row-source">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l4 4"/><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M18 8v6"/></svg>
+                <span class="src-strong">Merged PR</span> &middot; onboarding-welcome
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                Edit
+              </button>
+              <button class="btn ghost">Dismiss</button>
+              <button class="btn publish">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                Publish
+              </button>
+            </div>
+          </div>
+
+          <!-- ROW 3 — 📦 Next -->
+          <div class="row">
+            <div>
+              <span class="status-ctl next">
+                <span>&#128230;</span> Next
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+              </span>
+            </div>
+            <div class="cell-body">
+              <div class="row-title">Started payment integration</div>
+              <div class="row-summary">Began wiring up the payments provider.</div>
+              <div class="row-source">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M2 12h4M18 12h4"/></svg>
+                <span class="src-strong">Branch</span> &middot; feat/payments
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></svg>
+                Edit
+              </button>
+              <button class="btn ghost">Dismiss</button>
+              <button class="btn publish">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+                Publish
+              </button>
+            </div>
+          </div>
+
+          <!-- ROW 4 — LOW-VALUE / NOISE, quiet Dismiss emphasis -->
+          <div class="row noise">
+            <div>
+              <span class="status-ctl progress">
+                <span>&#128679;</span> In Progress
+                <span class="caret"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+              </span>
+            </div>
+            <div class="cell-body">
+              <div class="row-title">Bumped dependencies and fixed a typo</div>
+              <div class="row-summary">Routine maintenance &mdash; nothing the client needs to see.</div>
+              <div class="noise-flag">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 12h8"/></svg>
+                Low-value &middot; likely noise
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn dismiss-emph">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                Dismiss
+              </button>
+              <button class="btn ghost">Edit</button>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="queue-foot">
+          <kbd>J</kbd><kbd>K</kbd> move &middot; <kbd>E</kbd> edit &middot; <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd> set status &middot; <kbd>P</kbd> publish &middot; <kbd>X</kbd> dismiss
+        </div>
+      </main>
+    </div>
+  </div>
+
+  <div class="caption">
+    <div class="label">Soloist-branded &middot; dense but calm (anti-reference: cluttered PM dashboard)</div>
+    <div class="desc">GitHub candidates with editable plain-English titles; Iris appears only as the candidate-count badge; dark Soloist-Ink Publish is the deliberate privacy-boundary commit.</div>
+  </div>
+</body>
+</html>
