@@ -4,16 +4,20 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branding, tenants } from "../schema";
+import { branding, tenants, user } from "../schema";
 import { applyTenantScope } from "../scope";
 
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
-const db = drizzle(client, { schema: { tenants, branding } });
+const db = drizzle(client, { schema: { tenants, branding, user } });
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const TENANT_A = uuidv7();
 const TENANT_B = uuidv7();
+// Story 1.3: tenants.owner_user_id is now a NOT NULL FK → user.id, so the seed
+// needs real owner rows (the user table is global / has no RLS).
+const OWNER_A = "owner_a";
+const OWNER_B = "owner_b";
 
 /**
  * Mirrors production exactly: open a transaction and call the REAL `applyTenantScope`,
@@ -38,13 +42,18 @@ beforeAll(async () => {
       if (s) await client.exec(s);
     }
   }
+  // Seed the FK owners first (global table, no RLS, no scope needed).
+  await db.insert(user).values([
+    { id: OWNER_A, name: "Owner A", email: "owner-a@example.com" },
+    { id: OWNER_B, name: "Owner B", email: "owner-b@example.com" },
+  ]);
   // Seed Tenant A and B + branding, each in its own scoped tx (also proves WITH CHECK on insert).
   await asTenant(TENANT_A, async (tx) => {
-    await tx.insert(tenants).values({ id: TENANT_A, slug: "alpha", name: "Alpha" });
+    await tx.insert(tenants).values({ id: TENANT_A, slug: "alpha", name: "Alpha", ownerUserId: OWNER_A });
     await tx.insert(branding).values({ tenantId: TENANT_A, accentHex: "#aaaaaa" });
   });
   await asTenant(TENANT_B, async (tx) => {
-    await tx.insert(tenants).values({ id: TENANT_B, slug: "beta", name: "Beta" });
+    await tx.insert(tenants).values({ id: TENANT_B, slug: "beta", name: "Beta", ownerUserId: OWNER_B });
     await tx.insert(branding).values({ tenantId: TENANT_B, accentHex: "#bbbbbb" });
   });
 });

@@ -36,8 +36,10 @@ const eslintConfig = defineConfig([
     },
   },
   // The data-access layer is the one place allowed to touch Drizzle directly.
+  // src/server/auth is an infra peer that owns the Better Auth Drizzle adapter +
+  // the raw db handle, so it's exempt too.
   {
-    files: ["src/server/db/**"],
+    files: ["src/server/db/**", "src/server/auth/**"],
     rules: { "no-restricted-imports": "off" },
   },
   // Override default ignores of eslint-config-next.

@@ -1,7 +1,7 @@
 import Link from "next/link";
 
-// Public landing at `/`. (A fuller marketing page / auth entry comes later;
-// for the walking skeleton it brands the product and links into the Cockpit.)
+// Public landing at `/`. (A fuller marketing page comes later; for now it brands
+// the product and routes into sign-up.)
 export default function LandingPage() {
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background p-8 text-foreground">
@@ -16,10 +16,10 @@ export default function LandingPage() {
         English, under your brand.
       </p>
       <Link
-        href="/app"
+        href="/signup"
         className="mt-2 rounded-[var(--radius-md)] bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground"
       >
-        Open the Cockpit →
+        Create your workspace →
       </Link>
     </main>
   );

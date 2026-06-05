@@ -43,6 +43,9 @@
     "ws": "^8.21.0",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "kysely": "0.28.17"
+  },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.1",
     "@tailwindcss/postcss": "^4",
