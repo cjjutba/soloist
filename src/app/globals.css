@@ -1,0 +1,99 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+ * Soloist design tokens — see DESIGN.md.
+ * Raw values live in :root so the per-Tenant accent can be overridden at runtime
+ * (Story 1.6 sets --tenant-accent on the Portal root). @theme inline exposes them
+ * as Tailwind utilities (bg-background, text-status-shipped, font-display, …).
+ * Dark mode is intentionally out of v1 scope.
+ */
+:root {
+  /* Warm-neutral base */
+  --background: #fbfaf8; /* Warm Paper */
+  --foreground: #1c1b1f; /* Soloist Ink */
+  --muted: #f1f0ec;
+  --muted-foreground: #6b6760;
+  --border: #eae7e1;
+  --input: #eae7e1;
+  --ring: #5b5bd6;
+  --card: #ffffff;
+  --card-foreground: #1c1b1f;
+  --popover: #ffffff;
+  --popover-foreground: #1c1b1f;
+  --primary: #1c1b1f; /* Soloist Ink — Cockpit primary action */
+  --primary-foreground: #fbfaf8;
+  --secondary: #f1f0ec;
+  --secondary-foreground: #1c1b1f;
+  --accent: #f1f0ec;
+  --accent-foreground: #1c1b1f;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+
+  /* Per-Tenant accent — RUNTIME VARIABLE (default Soloist Iris). Overridden per Tenant in Story 1.6. */
+  --tenant-accent: #5b5bd6;
+  --tenant-accent-foreground: #ffffff;
+  --tenant-accent-text: #5b5bd6;
+
+  /* Fixed status vocabulary — never per-Tenant */
+  --status-shipped: #15803d;
+  --status-shipped-surface: #ecfdf3;
+  --status-progress: #92400e;
+  --status-progress-surface: #fef6e7;
+  --status-next: #475569;
+  --status-next-surface: #f1f5f9;
+
+  --radius: 0.625rem; /* 10px (md) base for shadcn */
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-tenant-accent: var(--tenant-accent);
+  --color-tenant-accent-foreground: var(--tenant-accent-foreground);
+  --color-tenant-accent-text: var(--tenant-accent-text);
+
+  --color-status-shipped: var(--status-shipped);
+  --color-status-shipped-surface: var(--status-shipped-surface);
+  --color-status-progress: var(--status-progress);
+  --color-status-progress-surface: var(--status-progress-surface);
+  --color-status-next: var(--status-next);
+  --color-status-next-surface: var(--status-next-surface);
+
+  /* Body/UI = Geist Sans · numeric = Geist Mono · premium moments = Fraunces (serif) */
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-fraunces);
+
+  /* Softer radii than shadcn defaults — premium-consumer read */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 20px;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), system-ui, sans-serif;
+}

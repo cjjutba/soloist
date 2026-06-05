@@ -33,3 +33,7 @@ pnpm-debug.log*
 
 # --- BMad personal overrides (not committed) ---
 _bmad/custom/config.user.toml
+
+# --- Vercel / test coverage ---
+.vercel
+/coverage
