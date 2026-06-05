@@ -28,7 +28,8 @@ export function resolveSurface(
 ): SurfaceResolution {
   if (!rawHost) return { surface: "not-found" };
 
-  const host = rawHost.split(":")[0].trim().toLowerCase();
+  let host = rawHost.split(":")[0].trim().toLowerCase();
+  if (host.endsWith(".")) host = host.slice(0, -1); // normalize the FQDN trailing dot
   if (!host) return { surface: "not-found" };
 
   // Vercel preview deployments → cockpit (so a preview URL is usable).
@@ -43,7 +44,8 @@ export function resolveSurface(
   // A subdomain of the root domain?
   if (host.endsWith(`.${root}`)) {
     const sub = host.slice(0, host.length - root.length - 1); // strip the trailing ".root"
-    if (!sub) return { surface: "not-found" };
+    // Slugs are a single DNS label — reject empty or multi-level subdomains.
+    if (!sub || sub.includes(".")) return { surface: "not-found" };
     if (sub === cockpit) return { surface: "cockpit" };
     return { surface: "portal", slug: sub };
   }

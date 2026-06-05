@@ -22,28 +22,39 @@ export function proxy(req: NextRequest) {
   const url = req.nextUrl.clone();
   const path = url.pathname;
 
-  // Unknown host → neutral not-found (NFR-2: no disclosure).
-  if (surface === "not-found") {
-    url.pathname = NOT_FOUND;
-    return NextResponse.rewrite(url);
-  }
+  // The proxy is the SOLE authority on the tenant slug — never trust an inbound
+  // x-tenant-slug header (a client could spoof it). Strip it on every request,
+  // then set it only for the portal surface below.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.delete("x-tenant-slug");
 
-  // The internal surface prefixes are not directly reachable by clients.
-  if (path.startsWith("/cockpit") || path.startsWith("/portal")) {
-    url.pathname = NOT_FOUND;
-    return NextResponse.rewrite(url);
+  // Forward the (cleaned) headers to the destination Server Component via the
+  // documented request-init channel — `headers()` reads the request, not the response.
+  const rewriteTo = (pathname: string) => {
+    url.pathname = pathname;
+    return NextResponse.rewrite(url, { request: { headers: requestHeaders } });
+  };
+
+  // Match the reserved internal prefixes by SEGMENT boundary, so paths like
+  // "/cockpit-roadmap" or "/portala" are not misclassified as internal.
+  const isInternalPrefix =
+    path === "/cockpit" ||
+    path.startsWith("/cockpit/") ||
+    path === "/portal" ||
+    path.startsWith("/portal/");
+
+  // Unknown host (NFR-2: no disclosure) or a client poking the internal prefixes → not-found.
+  if (surface === "not-found" || isInternalPrefix) {
+    return rewriteTo(NOT_FOUND);
   }
 
   const suffix = path === "/" ? "" : path;
 
   if (surface === "cockpit") {
-    url.pathname = `/cockpit${suffix}`;
-    return NextResponse.rewrite(url);
+    return rewriteTo(`/cockpit${suffix}`);
   }
 
-  // surface === "portal" — carry the resolved slug to server components via a header.
-  url.pathname = `/portal${suffix}`;
-  const res = NextResponse.rewrite(url);
-  if (slug) res.headers.set("x-tenant-slug", slug);
-  return res;
+  // surface === "portal" — set the slug authoritatively for server components.
+  if (slug) requestHeaders.set("x-tenant-slug", slug);
+  return rewriteTo(`/portal${suffix}`);
 }

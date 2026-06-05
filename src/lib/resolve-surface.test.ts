@@ -74,3 +74,19 @@ describe("resolveSurface — dev & preview hosts", () => {
     });
   });
 });
+
+describe("resolveSurface — edge-case hosts", () => {
+  it("normalizes a trailing-dot FQDN (cj.cjjutba.com.) to the portal", () => {
+    expect(resolveSurface("cj.cjjutba.com.", ROOT, COCKPIT)).toEqual({
+      surface: "portal",
+      slug: "cj",
+    });
+  });
+
+  it("routes a multi-level subdomain to not-found (slugs are single-label)", () => {
+    expect(resolveSurface("a.b.cjjutba.com", ROOT, COCKPIT).surface).toBe("not-found");
+    expect(resolveSurface("www.acme.cjjutba.com", ROOT, COCKPIT).surface).toBe(
+      "not-found",
+    );
+  });
+});

@@ -130,3 +130,4 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context)
 ## Change Log
 
 - 2026-06-06 — Story 1.1 implemented: Next 16 scaffold + DESIGN.md tokens/fonts + `proxy.ts` host routing (`resolveSurface`) + cockpit/portal/not-found shells + TanStack Query/sonner providers + Zod env contract. Verified locally (build, 11 tests, runtime routing on all four host cases). Task 6 (Vercel deploy + DNS) handed off to CJ.
+- 2026-06-06 — Addressed code-review findings: proxy now forwards the slug via the documented `request.headers` channel **and strips any inbound `x-tenant-slug`** (anti-spoof; pre-empts a cross-tenant hole in Story 1.5); internal-prefix guard uses segment boundaries (no longer false-blocks `/cockpit-*`); `resolveSurface` normalizes trailing-dot FQDNs and rejects multi-level subdomains; added `--radius-full` token; removed the unused `geist` package. Re-verified: 13 tests, build clean, runtime anti-spoof + routing confirmed.
