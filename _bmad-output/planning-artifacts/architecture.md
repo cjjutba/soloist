@@ -32,7 +32,7 @@ _Run solo. Deliver like an agency._
 
 | Subsystem | FRs | Architectural weight |
 |---|---|---|
-| **Tenancy, Branding & Auth** | FR-1–FR-5 | Multi-tenant foundation: subdomain routing, two roles, invite flow, per-Tenant branding. The isolation boundary (NFR-2) lives here. |
+| **Tenancy, Branding & Auth** | FR-1–FR-5 | Multi-tenant foundation: path-based routing, two roles, invite flow, per-Tenant branding. The isolation boundary (NFR-2) lives here. |
 | **Engagements** | FR-6, FR-7 | The core aggregate everything hangs off; Cockpit dashboard with the candidate-count signal. |
 | **Premium Onboarding** | FR-8 | One-time branded first-run; mostly UX, thin backend (a `completed_onboarding` flag). |
 | **Ship Feed — GitHub + Curation (the moat)** | FR-9–FR-14 | The hardest part: external integration, an event pipeline, the candidate→published privacy gate, near-real-time delivery. |
@@ -41,7 +41,7 @@ _Run solo. Deliver like an agency._
 
 **Non-Functional Requirements (the real architecture drivers).**
 
-- **NFR-2 Multi-Tenant Isolation — LAUNCH BLOCKER.** "No user can ever read or affect data outside their authorized Tenant/Engagement; cross-tenant access returns not-found, not denied." This is the single most architecture-shaping requirement and drives the data model, the data-access layer, authz, and subdomain routing.
+- **NFR-2 Multi-Tenant Isolation — LAUNCH BLOCKER.** "No user can ever read or affect data outside their authorized Tenant/Engagement; cross-tenant access returns not-found, not denied." This is the single most architecture-shaping requirement and drives the data model, the data-access layer, authz, and path/session routing.
 - **NFR-5 "Live" Performance.** Auto-pulled GitHub events → curation queue within ~5 min; publish → Client feed + notifications within ~30 s; Client Portal interactive within ~2 s on mid-range mobile/4G. Lenient enough that we do **not** need a websocket service.
 - **NFR-3 Security.** GitHub credentials encrypted/least-privilege; passwords hashed; the Client surface never exposes source/raw repo data (the curation boundary is also a security boundary).
 - **NFR-4 Reliability / Graceful Degradation.** GitHub failures degrade gracefully; manual Ship Updates always work; a failed auto-pull never blocks publishing or the Client's view.
@@ -59,7 +59,7 @@ _Run solo. Deliver like an agency._
 
 ### Technical Constraints & Dependencies
 
-- **Committed stack (addendum):** Next.js (App Router), Tailwind + shadcn/ui, Neon Postgres, Vercel, `*.cjjutba.com` wildcard. ORM (Drizzle vs Prisma), auth, email, jobs, and GitHub mechanism were left open "to decide in architecture" — decided below.
+- **Committed stack (addendum):** Next.js (App Router), Tailwind + shadcn/ui, Neon Postgres, Vercel, single domain `soloist.cjjutba.com`. ORM (Drizzle vs Prisma), auth, email, jobs, and GitHub mechanism were left open "to decide in architecture" — decided below.
 - **External dependency:** GitHub (App + webhooks). Must degrade gracefully (NFR-4).
 - **Single-builder operability (§9):** favor managed services + opinionated defaults over configurable complexity. Every decision below is weighed against "can one person run this with no ops?"
 - **Cadence:** 3-day-max sprints, launch ASAP, dogfood-first. Favors a monolithic Next.js app (no microservices), managed infra, and vertical slices.
@@ -69,7 +69,7 @@ _Run solo. Deliver like an agency._
 1. **Tenant/Engagement scoping** — every read and write must be scoped; this is the spine of NFR-2.
 2. **The candidate→published privacy gate** — a single enforced transition that controls Client visibility and triggers notifications.
 3. **Idempotency** — webhook deliveries and Inngest steps retry; all event processing must be idempotent.
-4. **Branding propagation** — per-Tenant logo + accent must reach Client surfaces *and* emails; resolved from the subdomain.
+4. **Branding propagation** — per-Tenant logo + accent must reach Client surfaces *and* emails; resolved from the session (or invite token pre-auth).
 5. **Error/degradation surfacing** — GitHub failures must reach the Cockpit (banner + repo card) without blocking anything.
 6. **Secrets** — GitHub App private key, session secrets, DB URL; minimized by the GitHub App model (short-lived installation tokens minted on demand, not stored).
 
@@ -108,7 +108,7 @@ npm i -D drizzle-kit
 ```
 
 **Architectural decisions provided by the starter:**
-- **Language & runtime:** TypeScript (strict), React 19.2, Node runtime on Vercel (with selective Edge middleware).
+- **Language & runtime:** TypeScript (strict), React 19.2, Node runtime on Vercel (with selective Edge middleware — the auth/role guard, not a host router).
 - **Styling:** Tailwind **v4** (CSS-first config via `@theme` + CSS variables in `globals.css` — no `tailwind.config.js`). This is the native home for DESIGN.md's tokens and the runtime `--tenant-accent`.
 - **Build tooling:** Turbopack (default in Next 16), React Compiler (stable in Next 16) — auto-memoization, less manual `useMemo`.
 - **Code organization:** `src/` + `@/*` alias + App Router file conventions.
@@ -121,7 +121,7 @@ npm i -D drizzle-kit
 
 ### Decision Priority Analysis
 
-**Critical (block implementation):** multi-tenancy & isolation model · ORM · auth library & session model · subdomain routing · GitHub integration mechanism · the candidate→published data flow.
+**Critical (block implementation):** multi-tenancy & isolation model · ORM · auth library & session model · path + session routing · GitHub integration mechanism · the candidate→published data flow.
 **Important (shape the architecture):** event/jobs layer · feed transport · notification fan-out · email provider · API style (Server Actions vs Route Handlers) · file storage · validation.
 **Deferred (post-MVP, seams provided now):** AI summarization engine · Vercel/Linear integrations · proposals/contracts doc types · realtime upgrade (websockets) · public demo portal seeding.
 
@@ -145,7 +145,7 @@ npm i -D drizzle-kit
 | Reads | **React Server Components** + TanStack Query for live/polled data | — | Fast mobile first paint; client islands only where interactivity needs it. |
 | File storage | **Vercel Blob** | — | Tenant logos + generated Invoice PDFs; integrated, scale-to-zero. |
 | Validation | **Zod** at every boundary | latest | One schema source for forms, actions, webhooks, env. |
-| Hosting | **Vercel** | — | Committed; wildcard `*.cjjutba.com`, cron, edge middleware. |
+| Hosting | **Vercel** | — | Committed; single domain `soloist.cjjutba.com`, cron. |
 | Errors/obs | **Sentry** + Vercel logs + Inngest dashboard | latest | Lightweight, solo-friendly. |
 
 ### Data Architecture
@@ -186,13 +186,13 @@ WebhookEvent        — id, gh_delivery_id (unique), event_type, received_at, pr
 
 ### Authentication & Security
 
-**Decision: Better Auth (email/password) + its organization plugin; subdomain+role authorization at the edge and in the data layer.**
+**Decision: Better Auth (email/password) + its organization plugin; path + role authorization on a single domain, enforced in the role guard and the data layer.** _(revised 2026-06-06 — path-based routing; see sprint-change-proposal-2026-06-06.md)_
 
 - **Why Better Auth over Auth.js/NextAuth v5:** verified June 2026 — Better Auth's **organization plugin ships organizations, members, invitations, and RBAC**, exactly the Tenant/Freelancer/Client/invite primitives Soloist needs, plus built-in email/password, email verification, password policies, rate limiting, and session management. With Auth.js we'd hand-build all of that. No vendor lock-in (unlike Clerk), no per-MAU cost (helps NFR-6).
 - **Mapping:** `Tenant = Organization` (owner = the Freelancer). The Freelancer is the org owner. **Client identities** are `User`s linked to a single Engagement via `ClientAccess` (app-level, because Client scope is Engagement-grained, finer than org membership). The Client invite (FR-5) uses a custom Engagement-scoped `Invitation` (unique, hashed, expiring token) → on accept, creates the `User` (or links existing) + `ClientAccess`, then routes to Onboarding.
 - **Roles:** `freelancer` (org owner) and `client`. Authorization is **deny-by-default**:
-  - **Edge middleware** resolves the surface from the host: `<slug>.cjjutba.com` → Client Portal for that Tenant; `soloist.cjjutba.com` → Cockpit. Unknown slug → neutral **not-found** (NFR-2; no existence disclosure).
-  - **Request authz** (in the data layer): Cockpit requests must have a session whose org = the subdomain's Tenant and role = freelancer. Client requests must have a `ClientAccess` row for the Engagement being accessed. Anything else → not-found.
+  - **Role guard (middleware/server):** resolves the surface from the **path** (`/app/*` → Cockpit; `/portal/*` → Client Portal; `/invite/[token]` → pre-auth onboarding) and the **session** (Tenant for `/app`, Engagement + Tenant for `/portal`), **never from the host**. `/app` ⇒ freelancer-of-this-Tenant; `/portal` ⇒ client-of-this-Engagement; mismatch, unknown path, or access to an unauthorized Engagement → neutral **not-found** (NFR-2; no existence disclosure).
+  - **Request authz** (in the data layer): Cockpit (`/app`) requests must have a session whose org = the authenticated Tenant and role = freelancer. Client (`/portal`) requests must have a `ClientAccess` row for the Engagement being accessed. Anything else → not-found.
 - **Security specifics (NFR-3):**
   - Passwords hashed by Better Auth (scrypt/argon2 default); plaintext never stored (FR-4).
   - **GitHub: no long-lived user tokens stored.** The **GitHub App** model means we store only `installation_id` + `repo_id`; short-lived installation tokens are minted on demand from the App private key (kept in a Vercel encrypted env var / outside the DB). This is strictly better than OAuth-token-at-rest. Least privilege: read-only `contents`, `metadata`, `pull_requests`, plus the `push`/`pull_request`/`release` webhook events.
@@ -226,8 +226,8 @@ WebhookEvent        — id, gh_delivery_id (unique), event_type, received_at, pr
 
 ### Infrastructure & Deployment
 
-- **Host:** Vercel. **Domains:** `soloist.cjjutba.com` (Cockpit) + wildcard `*.cjjutba.com` (Client Portals) on one project; middleware resolves the surface from `host`. ✓ **Cockpit host confirmed `soloist.cjjutba.com`** (CJ 2026-06-06, resolves PRD Open Q #8).
-- **Runtime split:** middleware on Edge (fast host/role resolution); app on Node serverless (Drizzle + Neon driver, GitHub App crypto, Inngest). 
+- **Host:** Vercel. **Domain:** single domain `soloist.cjjutba.com` (already live via a GoDaddy CNAME) on one project; surfaces are split by path (`/app` = Cockpit, `/portal` = Client Portal). No subdomains, no wildcard, no nameserver delegation. Per-freelancer custom domains are deferred (see Gap Analysis). ✓ **Single-domain path-based routing confirmed** (CJ 2026-06-06, resolves PRD Open Q #8).
+- **Runtime split:** middleware = auth/role guard (fast session/role resolution, no host routing); app on Node serverless (Drizzle + Neon driver, GitHub App crypto, Inngest). 
 - **Jobs/events:** **Inngest** — durable, retrying, multi-step functions triggered by events (`github/event.received`, `ship.published`, `invoice.sent`) plus a **scheduled reconciliation** function (every ~10 min) that polls connected repos for events missed by webhooks (NFR-4 backstop) and updates `RepoConnection.last_pull_at`. Replaces Vercel Cron; survives deploys; gives a job dashboard for free (solo observability).
 - **Environments:** `production` (Vercel prod + Neon main branch) and `preview` (Vercel previews + Neon branch per PR). Local dev: `.env.local`, Neon dev branch, Inngest dev server, a smee.io/Inngest tunnel for GitHub webhooks.
 - **CI/CD:** GitHub Actions — typecheck, lint, `drizzle-kit` migration check, build; Vercel auto-deploys on merge. (Apt, since CJ's own repo dogfoods the product.)
@@ -236,8 +236,8 @@ WebhookEvent        — id, gh_delivery_id (unique), event_type, received_at, pr
 
 ### Key Subsystem Designs (the load-bearing flows)
 
-**A. Multi-tenant subdomain resolution.**
-`middleware.ts` (Edge) reads `host`: `soloist.cjjutba.com` → Cockpit context; `<slug>.cjjutba.com` → look up Tenant by slug (cached) → Client context, attach `tenantId`; unknown slug or no Tenant → rewrite to the neutral not-found page (NFR-2). Branding for the Client Portal is resolved server-side in the Tenant layout from `Branding`, applied as CSS variables before render. **Reserved slugs** (`soloist`, `www`, `api`, `app`, `admin`, `mail`, `assets`, `static`, plus the apex) are rejected by the FR-1 slug picker so a Tenant can never claim a system subdomain.
+**A. Surface resolution (path + session).**
+Routing is native Next path segments on the single domain — no host-routing middleware, no `resolveSurface`, no `proxy.ts` host router. `/app/*` → Cockpit (Tenant from the authenticated session); `/portal/*` → Client Portal (Engagement + Tenant from the authenticated session); `/invite/[token]` → pre-auth onboarding (Tenant from the invite token, for branding only). The `middleware.ts` **auth/role guard** (Story 1.4) reads the **session** to resolve Tenant/Engagement and enforces the role match (`/app` ⇒ freelancer-of-this-Tenant, `/portal` ⇒ client-of-this-Engagement); an unknown path, a role mismatch, or access to an unauthorized Engagement → rewrite to the neutral not-found page (NFR-2; no disclosure). Branding for the Client Portal is resolved server-side in the layout from `Branding` (from the session, or the invite token pre-auth), applied as CSS variables before render. A Tenant still HAS a `slug` (internal identifier, reused for future custom domains) but it is **not URL-facing in v1**; the **reserved-slug** list (`soloist`, `www`, `api`, `app`, `admin`, `mail`, `assets`, `static`, plus the apex) is now **internal identifier hygiene**, not URL routing — rejected by the FR-1 slug picker.
 
 **B. GitHub event pipeline (FR-9–FR-11, the moat).**
 1. GitHub App installed on the Freelancer's repo → webhook deliveries (`push`, `pull_request`, `release`) hit `POST /api/webhooks/github`.
@@ -257,7 +257,7 @@ Invoice generated from a template prefilled from `Engagement`/`ClientAccess` sha
 
 **Implementation sequence (architectural dependency order; sprint planning sequences the slices):**
 1. Starter scaffold + env/Zod + Drizzle schema + Neon + the **tenant-scoped data layer** (NFR-2 first — everything else depends on it).
-2. Better Auth + organization=Tenant + sign-up/slug + subdomain middleware + not-found.
+2. Better Auth + organization=Tenant + sign-up/slug + path routing + auth/role guard + not-found.
 3. Engagements CRUD + Cockpit dashboard + Client invite/accept + Onboarding flag.
 4. GitHub App + webhook handler + Inngest pipeline + candidate creation + curation + **publish gate**.
 5. Client Ship Feed (poll) + Notifications fan-out (in-app + Resend email + toast).
@@ -284,7 +284,7 @@ Invoice generated from a template prefilled from `Engagement`/`ClientAccess` sha
 
 - **Feature-first server modules** under `src/server/<feature>/` (`engagements/`, `github/`, `ship-feed/`, `notifications/`, `doc-engine/`, `branding/`, `tenancy/`), each with `*.repository.ts` (data), `*.actions.ts` (Server Actions), `*.service.ts` (logic), `*.schema.ts` (Zod). **No feature imports another feature's repository directly** — cross-feature calls go through services.
 - **The data layer is the only place Drizzle is imported.** Feature code calls repositories that take `TenantContext`. A lint rule / convention forbids `import ... drizzle` outside `src/server/db/`.
-- **UI:** `src/components/ui/` (shadcn primitives, unchanged), `src/components/<feature>/` (feature components). Co-locate route UI under `app/(cockpit)/` and `app/(portal)/` route groups.
+- **UI:** `src/components/ui/` (shadcn primitives, unchanged), `src/components/<feature>/` (feature components). Co-locate route UI under the `app/app/` (Cockpit) and `app/portal/` (Client Portal) path segments.
 - **Tests co-located** `*.test.ts` next to source; e2e in `e2e/`. Isolation tests (NFR-2) are a required suite (`src/server/**/__tests__/isolation.test.ts`).
 
 ### Format Patterns
@@ -312,7 +312,7 @@ Invoice generated from a template prefilled from `Engagement`/`ClientAccess` sha
 ### Enforcement Guidelines — All agents MUST:
 - Access the DB **only** through tenant-scoped repositories with a `TenantContext`; never import Drizzle in feature/UI code.
 - Treat the **publish Server Action** as the sole candidate→published transition; never expose `raw_meta` to a Client query.
-- Resolve the surface (Cockpit vs Portal) and Tenant from middleware/session, **never from client-supplied tenant/engagement ids** without an authz check.
+- Resolve the surface (Cockpit vs Portal) from the **path** and the Tenant/Engagement from the **session** (via the auth/role guard), **never from client-supplied tenant/engagement ids** without an authz check.
 - Use design tokens, not hex; honor the contrast guard server-side.
 - Make every event handler idempotent.
 
@@ -339,12 +339,12 @@ soloist/
 ├── e2e/                            # Playwright: invite→onboarding→feed, curate→publish→notify
 ├── public/                         # static assets (Soloist marks; Tenant logos live in Blob)
 └── src/
-    ├── middleware.ts               # Edge: host→surface/Tenant resolution; not-found rewrite
+    ├── middleware.ts               # auth/role guard (Story 1.4): session→Tenant/Engagement + role match; not-found rewrite
     ├── env.ts                      # Zod-validated environment contract
     ├── app/
     │   ├── globals.css             # Tailwind v4 @theme — DESIGN.md tokens + --tenant-accent
     │   ├── layout.tsx              # root
-    │   ├── (cockpit)/              # soloist.cjjutba.com — Soloist-branded
+    │   ├── app/                    # /app — Cockpit (Soloist-branded; Tenant from session)
     │   │   ├── layout.tsx
     │   │   ├── engagements/
     │   │   │   ├── page.tsx                     # FR-7 dashboard (candidate-count badge)
@@ -355,13 +355,13 @@ soloist/
     │   │   │       └── documents/page.tsx       # FR-16–18 invoices
     │   │   ├── settings/branding/page.tsx       # FR-2 + contrast guard
     │   │   └── account/page.tsx
-    │   ├── (portal)/               # <slug>.cjjutba.com — Tenant-branded, mobile-first
+    │   ├── portal/                 # /portal — Client Portal (Tenant-branded, mobile-first; Engagement from session)
     │   │   ├── layout.tsx                       # sets --tenant-accent from Branding
     │   │   ├── onboarding/page.tsx              # FR-8 (one-time)
     │   │   ├── page.tsx                         # FR-14 Ship Feed (home)
-    │   │   ├── documents/page.tsx               # FR-18 invoice view
-    │   │   └── invite/[token]/page.tsx          # FR-5 accept + set password
-    │   ├── not-found.tsx           # neutral; unknown subdomain / unauthorized (NFR-2)
+    │   │   └── documents/page.tsx               # FR-18 invoice view
+    │   ├── invite/[token]/page.tsx              # FR-5 pre-auth accept + set password (Tenant from token, for branding)
+    │   ├── not-found.tsx           # neutral; unknown/unauthorized path (NFR-2)
     │   └── api/
     │       ├── auth/[...all]/route.ts           # Better Auth
     │       ├── webhooks/github/route.ts         # verify + dedupe + enqueue
@@ -402,12 +402,12 @@ soloist/
 
 | Feature group (FRs) | Primary locations |
 |---|---|
-| Tenancy/Branding/Auth (FR-1–5) | `server/auth`, `server/tenancy`, `server/branding`, `middleware.ts`, `app/(portal)/invite`, `app/(cockpit)/settings/branding` |
-| Engagements (FR-6–7) | `server/engagements`, `app/(cockpit)/engagements` |
-| Onboarding (FR-8) | `app/(portal)/onboarding`, `components/portal` |
-| Ship Feed + GitHub (FR-9–14) | `server/github`, `server/ship-feed`, `server/inngest`, `app/api/webhooks/github`, `app/(cockpit)/engagements/[id]`, `app/(portal)/page.tsx`, `app/api/feed` |
+| Tenancy/Branding/Auth (FR-1–5) | `server/auth`, `server/tenancy`, `server/branding`, `middleware.ts`, `app/invite/[token]`, `app/app/settings/branding` |
+| Engagements (FR-6–7) | `server/engagements`, `app/app/engagements` |
+| Onboarding (FR-8) | `app/portal/onboarding`, `components/portal` |
+| Ship Feed + GitHub (FR-9–14) | `server/github`, `server/ship-feed`, `server/inngest`, `app/api/webhooks/github`, `app/app/engagements/[id]`, `app/portal/page.tsx`, `app/api/feed` |
 | Notifications (FR-15) | `server/notifications`, `server/inngest`, `emails/`, `app/api/notifications` |
-| Doc Engine / Invoice (FR-16–18) | `server/doc-engine`, `app/(cockpit)/.../documents`, `app/(portal)/documents` |
+| Doc Engine / Invoice (FR-16–18) | `server/doc-engine`, `app/app/.../documents`, `app/portal/documents` |
 
 ### Integration Points & Data Flow
 
@@ -437,7 +437,7 @@ soloist/
 **CJ confirmations (2026-06-06):**
 - ✓ **Postgres RLS from day one** — both the app-layer scoped data access **and** DB-level RLS ship from the first migration (NFR-2 has two enforced layers at launch).
 - ✓ **Invoice PDF in v1** — Client gets the in-portal premium view **and** a downloadable branded PDF (`@react-pdf/renderer` + Vercel Blob).
-- ✓ **Cockpit host = `soloist.cjjutba.com`** — confirmed (resolves PRD Open Q #8); `soloist` and other system subdomains added to the reserved-slug list.
+- ✓ **Routing = single-domain path-based** (`/app`, `/portal`, `/invite/[token]`) on `soloist.cjjutba.com` — confirmed (resolves PRD Open Q #8); per-freelancer custom domains **deferred** (2026-06-06 course correction; dynamic subdomains would need Vercel nameserver delegation that risks the operator's live GoDaddy email on cjjutba.com). The `slug` survives as an internal identifier for those future custom domains; reserved-slug list demoted to internal identifier hygiene.
 - **Deferred by PRD (seams provided):** AI summarization engine (FR-11 fast-follow), real-time upgrade beyond polling, Vercel/Linear integrations, proposals/contracts, public demo-portal seeding (Open Q #4).
 
 **Minor / future:** Redis/read-replica caching (not needed at launch); granular notification preferences (PRD says simple on/off v1); formal data-retention policy (PRD Open Q #7).
@@ -470,7 +470,7 @@ soloist/
 
 ### Architecture Readiness Assessment
 
-**Overall Status:** **READY FOR IMPLEMENTATION** — all 16 checklist items confirmed; no Critical Gaps open. All three earlier `[CONFIRM]` items are now resolved (CJ 2026-06-06): RLS day-one, Invoice PDF in v1, Cockpit host `soloist.cjjutba.com`.
+**Overall Status:** **READY FOR IMPLEMENTATION** — all 16 checklist items confirmed; no Critical Gaps open. All three earlier `[CONFIRM]` items are now resolved (CJ 2026-06-06): RLS day-one, Invoice PDF in v1, single-domain path-based routing on `soloist.cjjutba.com`.
 
 **Confidence Level:** **High** — the stack is current and verified, the load-bearing requirement (NFR-2) has a concrete two-layer enforcement model, and the moat (GitHub→curation→publish→notify) has an end-to-end, idempotent, gracefully-degrading design.
 

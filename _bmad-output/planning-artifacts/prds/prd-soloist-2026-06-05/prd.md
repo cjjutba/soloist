@@ -16,7 +16,7 @@ This PRD is for CJ (the builder and primary user), the downstream BMad workflows
 
 ## 1. Vision
 
-Soloist is a dev-native client portal that lets a solo product engineer operate like a full agency. When a freelancer starts an engagement, their client lands in a premium, branded onboarding and then watches a live "what shipped" window that auto-populates from the developer's real tools — GitHub in v1 — rendered as plain-English progress a non-technical founder actually understands. The client always sees momentum and never has to ask *"any updates?"*. Meanwhile the freelancer runs the engagement and sends fill-in-the-blank documents (invoice in v1) from a single cockpit — under their own brand on a `*.cjjutba.com` subdomain.
+Soloist is a dev-native client portal that lets a solo product engineer operate like a full agency. When a freelancer starts an engagement, their client lands in a premium, branded onboarding and then watches a live "what shipped" window that auto-populates from the developer's real tools — GitHub in v1 — rendered as plain-English progress a non-technical founder actually understands. The client always sees momentum and never has to ask *"any updates?"*. Meanwhile the freelancer runs the engagement and sends fill-in-the-blank documents (invoice in v1) from a single cockpit — under their own brand on `soloist.cjjutba.com`.
 
 This matters because clients pay *before* they receive, and that gap breeds anxiety that erodes trust — the thing that costs solo freelancers their repeat business and referrals. Soloist closes the trust and legitimacy gaps with transparency that's automatic, not manual.
 
@@ -63,7 +63,7 @@ Timing is load-bearing, not incidental:
 
 - **UJ-2. Maya, a non-technical founder, opens her portal for the first time.**
   - **Persona + context:** Maya runs a pre-seed startup, paid CJ upfront, and is quietly anxious about whether the work is real.
-  - **Entry state:** Receives an invite email, clicks the link, sets a password, lands on `cj.cjjutba.com`.
+  - **Entry state:** Receives an invite email, clicks the link (`soloist.cjjutba.com/invite/<token>`), sets a password, and lands on the branded `/portal`.
   - **Path:** Branded premium Onboarding (CJ's logo + accent color) orients her → she arrives at the Ship Feed.
   - **Climax:** She immediately sees ✅ *"Set up the authentication system"* and 🚧 *"Building the dashboard"* in plain English — proof, on day one, that she hired someone who operates like an agency.
   - **Resolution:** She closes the tab reassured; she did not have to ask a single question.
@@ -84,20 +84,21 @@ Timing is load-bearing, not incidental:
 
 ## 4. Information Architecture
 
-Two role-keyed experiences, resolved by subdomain and authenticated role:
+Two role-keyed experiences on a **single domain** (`soloist.cjjutba.com`), resolved by **path + authenticated role** (revised 2026-06-06; see Sprint Change Proposal):
 
-- **Cockpit (Freelancer) —** `[ASSUMPTION]` served at a primary app domain (e.g. `app.cjjutba.com`; confirm in architecture).
+- **Cockpit (Freelancer) —** served at **`/app/*`**; the freelancer's Tenant is resolved from the authenticated session.
   - Engagements list → Engagement detail (Ship Feed curation queue · Repo Connections · Client management · Documents/Invoices) → Tenant & Branding settings → Account.
-- **Client Portal (Client) —** served at the Tenant subdomain `<slug>.cjjutba.com`, fully branded.
+- **Client Portal (Client) —** served at **`/portal/*`**, fully branded; the Client's Engagement + Tenant (branding) are resolved from the authenticated session.
   - First-run Onboarding → Engagement home (Ship Feed) → Documents (Invoices). Deliberately minimal navigation; the Ship Feed is the center of gravity.
+- **Invite/onboarding —** **`/invite/[token]`** (pre-auth); the Tenant (for branding) is resolved from the invite token.
 
-Both experiences are responsive and fully usable on mobile (a constraint, not a feature — see §10).
+A per-freelancer **custom domain** (`portal.theiragency.com`) is a deferred upgrade, not v1 — dynamic per-Tenant subdomains would require Vercel nameserver delegation that risks the operator's live email on `cjjutba.com`, and the premium experience lives in the branded UI, not the hostname. Both experiences are responsive and fully usable on mobile (a constraint, not a feature — see §10).
 
 ## 5. Glossary
 
 *Downstream workflows and readers must use these terms exactly. Introducing a synonym anywhere in the PRD is a discipline violation.*
 
-- **Tenant** — A single Freelancer's branded workspace. One Freelancer owns one Tenant. Maps to one subdomain (`<slug>.cjjutba.com`). Contains many Engagements.
+- **Tenant** — A single Freelancer's branded workspace. One Freelancer owns one Tenant. Has an internal `slug` identifier (reserved for future custom domains; **not URL-facing in v1** — see FR-3). Contains many Engagements.
 - **Freelancer** — The primary user; the solo product engineer who owns a Tenant and runs Engagements. Operates in the Cockpit.
 - **Client** — The founder/operator on the receiving side of an Engagement. Operates in the Client Portal. One Client per Engagement (v1).
 - **Engagement** — The unit of work between a Freelancer and a Client (a project). Belongs to one Tenant, has one Client, one Ship Feed, zero-or-more Repo Connections, and zero-or-more Invoices.
@@ -117,13 +118,13 @@ Both experiences are responsive and fully usable on mobile (a constraint, not a 
 
 ### 6.1 Tenancy, Branding & Authentication
 
-**Description:** The multi-tenant foundation. Any dev-freelancer can sign up, get their own branded workspace on a subdomain, and invite clients — all isolated from every other Tenant. Email + password auth for both roles. Realizes UJ-1, UJ-2.
+**Description:** The multi-tenant foundation. Any dev-freelancer can sign up, get their own branded workspace (a Tenant) at `/app`, and invite clients — all isolated from every other Tenant. Email + password auth for both roles. Realizes UJ-1, UJ-2.
 
 #### FR-1: Freelancer Sign-Up & Tenant Provisioning
 A Freelancer can sign up with email + password, which provisions a new Tenant. Realizes UJ-1.
 **Consequences (testable):**
 - Successful sign-up creates exactly one Tenant owned by the Freelancer.
-- The Freelancer chooses a subdomain slug; the system rejects duplicates and invalid slugs and reserves `<slug>.cjjutba.com`.
+- The Freelancer chooses a Tenant slug (an internal identifier, reserved for future custom domains — not URL-facing in v1); the system rejects duplicates and invalid slugs.
 - `[ASSUMPTION]` Email verification is required before the Tenant is publicly reachable.
 
 #### FR-2: Per-Tenant Branding
@@ -132,11 +133,11 @@ A Freelancer can set Branding (logo + accent color) applied across all Client-fa
 - The uploaded logo and accent color render on Onboarding, the Client Portal, and notification emails.
 - A neutral default Branding applies until customized.
 
-#### FR-3: Subdomain Routing
-Each Tenant's Client Portal is served at its `<slug>.cjjutba.com` subdomain.
+#### FR-3: Surface Routing (path-based) *(revised 2026-06-06)*
+The Cockpit and Client Portals are served by **path** on the single domain `soloist.cjjutba.com`, resolved with the authenticated session.
 **Consequences (testable):**
-- A request to a valid Tenant subdomain resolves to that Tenant's Client Portal with its Branding applied.
-- An unknown subdomain returns a clear not-found state (no leakage of other Tenants).
+- `/app/*` resolves the Cockpit for the authenticated Freelancer (their Tenant); `/portal/*` resolves the Client's Engagement and applies that Tenant's Branding.
+- An unknown path — or access to an Engagement the user is not authorized for — returns a clear not-found state (no leakage of other Tenants).
 
 #### FR-4: Authentication (both roles)
 A Freelancer and a Client can each authenticate with email + password.
@@ -308,7 +309,7 @@ v1 should run on solo-budget-friendly infrastructure (serverless / free-or-cheap
 ## 10. Platform
 
 - **v1:** Responsive web app (Cockpit + Client Portal), mobile-first on the Client side. No native mobile apps.
-- **Surfaces** keyed by subdomain + role (see §4).
+- **Surfaces** keyed by path + role on `soloist.cjjutba.com` (see §4).
 
 ## 11. Non-Goals (Explicit)
 
@@ -324,7 +325,7 @@ Soloist v1 is **not**:
 ## 12. MVP Scope
 
 ### 12.1 In Scope (full brief-v1)
-- Multi-tenant + per-Tenant Branding (logo, accent); subdomain routing on `*.cjjutba.com`. (FR-1–FR-3)
+- Multi-tenant + per-Tenant Branding (logo, accent); single-domain path routing on `soloist.cjjutba.com` (`/app`, `/portal`, `/invite/[token]`). (FR-1–FR-3)
 - Email + password auth for Freelancer and Client. (FR-4, FR-5)
 - Engagement object + Cockpit management. (FR-6, FR-7)
 - Premium branded Client Onboarding. (FR-8)
@@ -367,7 +368,7 @@ Soloist v1 is **not**:
 5. **What makes Onboarding "premium," concretely** — a UX-phase deliverable (FR-8).
 6. **Other-freelancer demand (named risk).** Designing for other dev-freelancers before they are real users risks building on assumed workflows. **The dogfood loop (CJ on real clients, SM-1) is the *primary* validation signal**; other-freelancer features should track that signal and not get multi-tenant polish ahead of demonstrated demand.
 7. **Data retention / ownership policy** — deferred; revisit before onboarding non-CJ Freelancers (§9).
-8. **Cockpit domain** — confirm Cockpit host vs. Client subdomains (FR-3, §4).
+8. **Cockpit domain** — ✅ **RESOLVED (2026-06-06):** single domain, path-based — Cockpit at `soloist.cjjutba.com/app`, Client Portal at `/portal` (no per-Tenant subdomains in v1; custom domains deferred). See FR-3, §4, Sprint Change Proposal.
 
 ## 15. Assumptions Index
 
@@ -375,7 +376,7 @@ Soloist v1 is **not**:
 
 - **§3.2** — Small 2–3 person dev studios are a later audience, not v1.
 - **FR-1** — Email verification required before a Tenant is publicly reachable.
-- **FR-3 / §4** — Cockpit served at a primary app domain (e.g. `app.cjjutba.com`), separate from Client subdomains.
+- **FR-3 / §4** — ✅ resolved: single-domain path-based routing (`/app`, `/portal`, `/invite/[token]`) on `soloist.cjjutba.com`; per-Tenant subdomains/custom domains deferred.
 - **FR-5** — One Client identity per Engagement in v1.
 - **FR-6** — Exact Engagement field set (name, client basics, scope/description).
 - **FR-9 / NFR-3** — GitHub authorization uses read-only repo scope; App-vs-OAuth + webhook-vs-poll decided in architecture.

@@ -4,9 +4,7 @@ export default function CockpitPage() {
       <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
         Soloist · Cockpit
       </p>
-      <h1 className="text-center font-display text-4xl">
-        Run solo. Deliver like an agency.
-      </h1>
+      <h1 className="text-center font-display text-4xl">Your workspace</h1>
       <p className="max-w-md text-center text-muted-foreground">
         The freelancer back-office. Walking skeleton — engagements, curation, and
         invoices arrive in later stories.

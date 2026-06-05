@@ -21,9 +21,9 @@ This document provides the complete epic and story breakdown for Soloist, decomp
 ### Functional Requirements
 
 **Tenancy, Branding & Authentication (FR-1–FR-5)**
-- **FR-1:** Freelancer Sign-Up & Tenant Provisioning — sign up (email + password) provisions one Tenant; choose a subdomain slug; reject duplicate/invalid slugs; reserve `<slug>.cjjutba.com`; email verification before the Tenant is publicly reachable.
+- **FR-1:** Freelancer Sign-Up & Tenant Provisioning — sign up (email + password) provisions one Tenant; choose a Tenant slug (internal identifier, not URL-facing in v1); reject duplicate/invalid slugs; email verification before the Tenant is publicly reachable.
 - **FR-2:** Per-Tenant Branding — set logo + accent color, rendered on Onboarding, Client Portal, and notification emails; neutral default until customized.
-- **FR-3:** Subdomain Routing — valid Tenant subdomain resolves to that Tenant's branded Client Portal; unknown subdomain returns a clear not-found state (no leakage).
+- **FR-3:** Surface Routing (path-based) — `/app` resolves the Cockpit and `/portal` the Client's Engagement (from session); unknown/unauthorized path → clear not-found (no leakage).
 - **FR-4:** Authentication (both roles) — email + password for Freelancer and Client; passwords hashed; logout/expiry; requests resolve only within authorized Tenant/Engagement scope.
 - **FR-5:** Client Invitation & Access — invite a Client by email (unique, expiring link); Client sets a password and enters the Engagement; one Client identity per Engagement (v1).
 
@@ -70,7 +70,7 @@ This document provides the complete epic and story breakdown for Soloist, decomp
 - **AR-4 — Tenant-scoped data-access layer (NFR-2 choke point):** all DB access via repositories requiring a `TenantContext`; no Drizzle import outside `src/server/db/`; cross-scope → empty/not-found.
 - **AR-5 — Postgres RLS backstop (✓ day-one)** on every tenant-scoped table (per-request `SET LOCAL app.tenant_id` / `app.engagement_id` + `USING` policies) — defense-in-depth for NFR-2, shipped from the first migration alongside the app-layer scoping.
 - **AR-6 — Better Auth (organization plugin):** Tenant = Organization, Freelancer = owner; email/password + verification; app-level `ClientAccess` for Engagement-scoped Client identities.
-- **AR-7 — Edge middleware subdomain/role resolution:** `soloist.cjjutba.com` → Cockpit; `<slug>.cjjutba.com` → Client Portal (+Tenant); unknown → neutral not-found. Reserved slugs (`soloist`, `www`, `api`, `app`, `admin`, `mail`, …) rejected by the FR-1 slug picker.
+- **AR-7 — Path + session role guard:** `/app` → Cockpit (freelancer), `/portal` → Client Portal (Engagement+Tenant from session), `/invite/[token]` pre-auth; unknown/unauthorized → neutral not-found. Native Next path segments — no host routing.
 - **AR-8 — GitHub App + webhooks (primary) + reconciliation cron (backstop):** signature-verified webhook handler; `WebhookEvent` idempotency ledger; Octokit with throttling/retry; least-privilege read-only.
 - **AR-9 — Inngest event/jobs layer:** durable functions for `github/event.received`, `ship.published`, `invoice.sent` + scheduled `reconcile-repos`; idempotent steps; retries.
 - **AR-10 — Feed transport = client polling** (TanStack Query, ~20s + refetch-on-focus) behind a swappable transport seam; meets ~30s at zero realtime cost.
@@ -98,7 +98,7 @@ This document provides the complete epic and story breakdown for Soloist, decomp
 - **UX-DR11 — Notification toast + notification center:** toast only when active; center lists published-update + invoice events, read/unread, links to target.
 - **UX-DR12 — Invoice builder + premium in-portal view + branded PDF (✓ v1):** prefilled fields, `numeric` amounts, status chip; serif document feel; downloadable branded PDF (`@react-pdf/renderer` + Vercel Blob) alongside the in-portal view.
 - **UX-DR13 — Designed empty states (5):** pre-first-publish feed, no Engagements, no repo connected, curation queue clear, no Invoices.
-- **UX-DR14 — Error/degraded states:** GitHub-failure banner + repo error card, token-revoked, neutral not-found subdomain, invite-expired, offline (Client feed).
+- **UX-DR14 — Error/degraded states:** GitHub-failure banner + repo error card, token-revoked, neutral not-found (unknown/unauthorized path), invite-expired, offline (Client feed).
 - **UX-DR15 — Accessibility Floor:** keyboard/focus (trap+return, focus-to-`<h1>` on route change), `aria-live="polite"` feed announcements (no focus move), ≥44px Client / ≥24px Cockpit touch targets, shortcuts suppressed in inputs + `?` overlay, forms a11y (labels, `role="alert"` errors), `prefers-reduced-motion`, contrast thresholds (4.5 text / 3.0 non-text).
 - **UX-DR16 — Voice & microcopy library:** plain-English, founder-friendly, momentum-positive; ✅/🚧/📦 vocabulary; per the EXPERIENCE.md Do/Don't table (feed, notifications, empties, errors, onboarding, invoice).
 - **UX-DR17 — Responsive layouts:** Client Portal single-column mobile-first (`max-w-2xl`, never widens to a dashboard); Cockpit desktop-primary (sidebar → Sheet on small; bulk actions on `lg+`).
@@ -108,7 +108,7 @@ This document provides the complete epic and story breakdown for Soloist, decomp
 
 - **FR-1** → Epic 1 — Freelancer sign-up + Tenant provisioning + slug.
 - **FR-2** → Epic 1 — Per-Tenant Branding set + contrast guard (applied to surfaces as they ship).
-- **FR-3** → Epic 1 — Subdomain routing + neutral not-found.
+- **FR-3** → Epic 1 — Path-based surface routing + neutral not-found.
 - **FR-4** → Epic 1 — Email/password auth (both roles; Client login realized via the Epic 2 invite).
 - **FR-5** → Epic 2 — Client invitation & engagement-scoped access.
 - **FR-6** → Epic 2 — Create & manage Engagement.
@@ -130,11 +130,11 @@ All 18 FRs mapped. NFRs and UX-DRs are cross-cutting and called out in each epic
 ## Epic List
 
 ### Epic 1: Freelancer Account & Branded Workspace
-A dev-freelancer can sign up, claim an isolated Tenant on their own `<slug>.cjjutba.com`, log in/out securely, and set their Branding (logo + accent with the contrast guard) — on a foundation where **no Tenant can ever read or affect another's data** (NFR-2, enforced at both the app layer and the database).
+A dev-freelancer can sign up, claim an isolated Tenant (at `/app` on `soloist.cjjutba.com`), log in/out securely, and set their Branding (logo + accent with the contrast guard) — on a foundation where **no Tenant can ever read or affect another's data** (NFR-2, enforced at both the app layer and the database).
 **FRs covered:** FR-1, FR-2, FR-3, FR-4.
 **Delivers:** the multi-tenant foundation + a working, isolated, branded freelancer account (UJ-1 entry state). Standalone: a freelancer has a real account and workspace.
-**Implementation notes:** starter scaffold (AR-1/2), schema + drizzle-kit migrations (AR-3), the **tenant-scoped data-access layer + Postgres RLS** (AR-4/5 — built and proven first), Better Auth with organization=Tenant (AR-6), edge subdomain/role middleware + reserved slugs + neutral not-found (AR-7), the design-system foundation (UX-DR1/2 tokens + type) and Branding setup + 3-way contrast guard + application mechanism (UX-DR3/4). Cockpit shell at `soloist.cjjutba.com`.
-**Pre-mortem guardrails:** Story 1 = a **deployable walking skeleton** (`soloist.cjjutba.com` + a `<slug>.cjjutba.com` "hello" behind auth, live on Vercel) so deploy + subdomain routing + tenancy are proven end-to-end on day one; every Epic 1 story ships independently. Decide the **cross-subdomain auth/session model explicitly** (`.cjjutba.com` cookie scoping, with role+tenant re-checked server-side on every request — a Client's portal session must never act on the Cockpit). `TenantContext` + RLS GUCs carry **both** `app.tenant_id` *and* `app.engagement_id`; the **isolation test suite includes the engagement-scoped Client case as a fixture from day one** (before the Client UI exists). Includes thin cross-cutting stories: Cockpit Account settings, observability/CI (AR-15/16).
+**Implementation notes:** starter scaffold (AR-1/2), schema + drizzle-kit migrations (AR-3), the **tenant-scoped data-access layer + Postgres RLS** (AR-4/5 — built and proven first), Better Auth with organization=Tenant (AR-6), path routing + auth/role guard (AR-7), the design-system foundation (UX-DR1/2 tokens + type) and Branding setup + 3-way contrast guard + application mechanism (UX-DR3/4). Cockpit shell at `/app`.
+**Pre-mortem guardrails:** Story 1 = a **deployable walking skeleton** (single domain `soloist.cjjutba.com`, `/app` + `/portal` live on Vercel) so deploy + path routing + tenancy are proven end-to-end on day one; every Epic 1 story ships independently. Decide the **single-domain session + role guard explicitly** (one cookie domain; role+tenant re-checked server-side on every request — a Client's `/portal` session must never act on `/app`). `TenantContext` + RLS GUCs carry **both** `app.tenant_id` *and* `app.engagement_id`; the **isolation test suite includes the engagement-scoped Client case as a fixture from day one** (before the Client UI exists). Includes thin cross-cutting stories: Cockpit Account settings, observability/CI (AR-15/16).
 
 ### Epic 2: Engagements & the Premium Client Welcome
 A freelancer can create and manage Engagements, invite a Client by email; the Client accepts, sets a password, and lands in a branded premium Onboarding that leads to their Ship Feed — the "you hired an agency" first impression, even before any GitHub data flows.
@@ -165,24 +165,24 @@ A freelancer generates a branded Invoice prefilled from Engagement/Client data, 
 
 Cross-epic hazards surfaced by a pre-mortem and the mitigations baked into the plan. These harden *sequencing within and across* epics without changing the 5 epics or FR coverage.
 
-1. **Walking skeleton first (vs a foundation swamp).** Epic 1's heavy foundation risks weeks with nothing demoable, breaking the 3-day cadence. → Epic 1 Story 1 is a **deployable skeleton** (auth + both subdomains live on Vercel); every Epic 1 story ships independently.
+1. **Walking skeleton first (vs a foundation swamp).** Epic 1's heavy foundation risks weeks with nothing demoable, breaking the 3-day cadence. → Epic 1 Story 1 is a **deployable skeleton** (auth + `/app` + `/portal` live on Vercel); every Epic 1 story ships independently.
 2. **De-risk the moat early.** The riskiest work (GitHub App + webhooks + Inngest + local-dev tunneling) is in Epic 3. → Epic 3 Story 1 is a **vertical spike** (install → webhook → one rendered candidate) before any curation chrome; consider a throwaway spike alongside Epic 1.
 3. **Founder-readable rendering = the kill-signal.** The heuristic (AI deferred) must read like plain English or the trust wow (SM-2) and the no-busywork promise (SM-1) both fail. → Strong heuristic; measure "% candidates rewritten" in dogfood; AI-summary seam stays hot as the first fast-follow.
 4. **Don't ship a dead feed.** Notifications in Epic 4 mean Epic 3's "live" feed would rely on the Client remembering to check. → **Minimal email-on-publish moves into Epic 3**; the full center/toast/prefs stay in Epic 4.
-5. **Isolation must cover the engagement-scoped Client case from day one.** Tenant-level isolation is easy; the subtle cases (a Client scoped to one Engagement within CJ's own Tenant; cross-subdomain session/cookie scoping) leak if discovered late — the most dangerous refactor (NFR-2 is the launch blocker). → Epic 1 designs `TenantContext` + RLS GUCs for `tenant_id` **and** `engagement_id`, fixes the cross-subdomain auth model, and ships an **isolation test suite covering the Client case before the Client UI exists**.
+5. **Isolation must cover the engagement-scoped Client case from day one.** Tenant-level isolation is easy; the subtle cases (a Client scoped to one Engagement within CJ's own Tenant; single-domain session + role guard) leak if discovered late — the most dangerous refactor (NFR-2 is the launch blocker). → Epic 1 designs `TenantContext` + RLS GUCs for `tenant_id` **and** `engagement_id`, fixes the single-domain session + role guard, and ships an **isolation test suite covering the Client case before the Client UI exists**.
 6. **Story sizing.** Epics 3 (and 1) are large. → Step 3 slices into small, independently shippable, single-context stories (Epic 3 ≈ 8–10).
 
 ---
 
 ## Epic 1: Freelancer Account & Branded Workspace
 
-A dev-freelancer can sign up, claim an isolated Tenant on their own `<slug>.cjjutba.com`, log in/out securely, and set their Branding — on a foundation where no Tenant can ever read or affect another's data (NFR-2, enforced at the app layer **and** the database). **Covers FR-1, FR-2, FR-3, FR-4.**
+A dev-freelancer can sign up, claim an isolated Tenant (at `/app` on `soloist.cjjutba.com`), log in/out securely, and set their Branding — on a foundation where no Tenant can ever read or affect another's data (NFR-2, enforced at the app layer **and** the database). **Covers FR-1, FR-2, FR-3, FR-4.**
 
 ### Story 1.1: Deployable Walking Skeleton
 
 As the builder,
-I want the app scaffolded, themed, and deployed with both surfaces resolving by subdomain,
-So that deploy + subdomain routing + the design system are proven end-to-end on day one and every later story layers onto something already shipping.
+I want the app scaffolded, themed, and deployed with both surfaces resolving by path,
+So that deploy + path routing + the design system are proven end-to-end on day one and every later story layers onto something already shipping.
 
 **Acceptance Criteria:**
 
@@ -191,11 +191,11 @@ So that deploy + subdomain routing + the design system are proven end-to-end on 
 **Then** the app builds and runs locally with TypeScript strict, Tailwind v4, and the `@/*` alias
 **And** `src/env.ts` validates required environment variables with Zod and fails fast when one is missing.
 
-**Given** the deployed app on Vercel with the `*.cjjutba.com` wildcard + `soloist.cjjutba.com` configured
-**When** a request hits `soloist.cjjutba.com`
-**Then** edge middleware resolves the Cockpit surface and renders a Cockpit shell
-**And When** a request hits any `<slug>.cjjutba.com`, middleware resolves the Client-Portal surface (placeholder Tenant lookup) and renders a Portal shell
-**And When** a request hits an unrecognized host, it renders the neutral `not-found` page (no disclosure).
+**Given** the deployed app on Vercel on the single domain `soloist.cjjutba.com`
+**When** a request hits `GET /app`
+**Then** the path/role guard resolves the Cockpit surface and renders a Cockpit shell
+**And When** a request hits `GET /portal`, the guard resolves the Client-Portal surface (placeholder Tenant lookup) and renders a Portal shell
+**And When** a request hits an unknown/unauthorized path, it renders the neutral `not-found` page (no disclosure).
 
 **Given** the DESIGN.md token system
 **When** `globals.css` is authored with the Tailwind v4 `@theme`
@@ -227,7 +227,7 @@ So that NFR-2 isolation is enforced at a single auditable choke point and at the
 ### Story 1.3: Freelancer Sign-Up + Tenant Provisioning + Slug
 
 As a dev-freelancer,
-I want to sign up with email and password and claim my subdomain,
+I want to sign up with email and password and claim my Tenant,
 So that I get my own isolated branded workspace.
 
 **Acceptance Criteria:**
@@ -235,42 +235,37 @@ So that I get my own isolated branded workspace.
 **Given** the sign-up screen
 **When** I register with email + password (Better Auth)
 **Then** exactly one Tenant (Better Auth Organization) is created with me as owner, and my password is stored hashed (FR-1, FR-4)
-**And** an email-verification step is required before my Tenant subdomain is publicly reachable.
+**And** an email-verification step is required before my Tenant is active.
 
 **Given** the slug picker
-**When** I choose a subdomain slug
-**Then** the system reserves `<slug>.cjjutba.com` only if the slug is unique, valid, and **not** in the reserved list (`soloist`, `www`, `api`, `app`, `admin`, `mail`, …)
+**When** I choose a Tenant slug
+**Then** the system accepts the slug only if unique and valid (internal Tenant identifier; reserved system names still disallowed)
 **And** duplicate/invalid/reserved slugs are rejected with a clear message.
 
-### Story 1.4: Authentication, Sessions & Cross-Subdomain Model
+### Story 1.4: Authentication, Sessions & Single-Domain Role Guard
 
 As a Freelancer,
-I want to log in and out securely with sessions that behave correctly across subdomains,
+I want to log in and out securely with a single-domain session with a role guard,
 So that my workspace is protected and a Client's portal session can never act on the Cockpit.
 
 **Acceptance Criteria:**
 
 **Given** a registered Freelancer
-**When** I log in on `soloist.cjjutba.com` and later log out
+**When** I log in and later log out
 **Then** a session is established and can be ended; sessions expire per policy (FR-4).
 
-**Given** the cross-subdomain session model
+**Given** the single-domain session + role guard
 **When** any request is served
 **Then** role + Tenant are re-checked server-side on every request (never trusted from the cookie), so a `client`-role session presented to the Cockpit is rejected → not-found
 **And** Cockpit routes are inaccessible without a `freelancer` session for the matching Tenant.
 
-### Story 1.5: Subdomain Routing Resolves a Real Tenant
+**Given** the role guard
+**When** a request hits a guarded surface
+**Then** `/app` requires a freelancer session for this Tenant, `/portal` requires a client session for this Engagement; mismatch/unauthorized → not-found (folds in the former Story 1.5).
 
-As a visitor,
-I want a Tenant subdomain to resolve to that Tenant's branded Client Portal,
-So that each freelancer's clients reach the right place and unknown subdomains leak nothing.
+### Story 1.5: Superseded — Tenant resolved from session
 
-**Acceptance Criteria:**
-
-**Given** an existing Tenant with slug `cj`
-**When** a request hits `cj.cjjutba.com`
-**Then** middleware resolves the Tenant, attaches `tenantId`, and renders that Tenant's Client-Portal shell (FR-3)
-**And When** a request hits an unknown `<slug>.cjjutba.com`, it returns the neutral not-found state identical to an unauthorized resource (NFR-2, no disclosure).
+**Superseded by Story 1.4 (path-based course correction, 2026-06-06).** With single-domain path routing there is no subdomain to resolve — the Tenant/Engagement is taken authoritatively from the authenticated session, and unauthorized access returns not-found. That behavior is folded into Story 1.4's role guard. No separate story required.
 
 ### Story 1.6: Per-Tenant Branding + Contrast Guard
 
@@ -365,7 +360,7 @@ So that I can enter my Engagement's portal.
 
 **Acceptance Criteria:**
 
-**Given** a valid invite link on `<slug>.cjjutba.com/invite/[token]`
+**Given** a valid invite link on `soloist.cjjutba.com/invite/[token]`
 **When** I set a password
 **Then** a `client` User is created/linked, a `ClientAccess` row scopes me to that one Engagement, and I am logged in scoped to it (FR-5, FR-4)
 **And** an expired/invalid token shows the branded "ask for a new link" state with no account disclosure.

@@ -15,12 +15,12 @@ updated: 2026-06-06
 
 ## Foundation
 
-Soloist is **two role-keyed responsive web surfaces sharing one design system**, resolved by **subdomain + authenticated role** — no native apps in v1. Built on **shadcn/ui + Tailwind on Next.js (App Router)**; `DESIGN.md` is the visual identity reference and the component library does most of the work.
+Soloist is **two role-keyed responsive web surfaces sharing one design system**, resolved by **path + authenticated role** on `soloist.cjjutba.com` — no native apps in v1. Built on **shadcn/ui + Tailwind on Next.js (App Router)**; `DESIGN.md` is the visual identity reference and the component library does most of the work.
 
-- **Cockpit** — the Freelancer's working tool. Served at `soloist.cjjutba.com` (✓ confirmed, CJ 2026-06-06; resolves PRD Open Q #8). Soloist-branded; responsive but **desktop-primary** (it's where CJ works). Audience: a developer — reward keyboard fluency.
-- **Client Portal** — the premium, **Tenant-branded** experience at `<slug>.cjjutba.com`. **Mobile-first** ("clients read updates on their phone"). Audience: a non-technical founder — reward dead-simple, zero-learning reading.
+- **Cockpit** — the Freelancer's working tool. Served at `/app/*` on `soloist.cjjutba.com` (single-domain path routing, 2026-06-06). Soloist-branded; responsive but **desktop-primary** (it's where CJ works). Audience: a developer — reward keyboard fluency.
+- **Client Portal** — the premium, **Tenant-branded** experience at `/portal/*` (Tenant branding resolved from the authenticated session). **Mobile-first** ("clients read updates on their phone"). Audience: a non-technical founder — reward dead-simple, zero-learning reading.
 
-**Tenancy:** one **Tenant** per Freelancer (one subdomain) → many **Engagements**; an Engagement has one **Ship Feed**, 0+ **Repo Connections**, one **Client** (v1), 0+ **Invoices**. A **Ship Update** is either a *candidate* (Freelancer-only) or *published* (Client-visible). The whole product hinges on that one distinction — see Privacy & Visibility.
+**Tenancy:** one **Tenant** per Freelancer → many **Engagements**; an Engagement has one **Ship Feed**, 0+ **Repo Connections**, one **Client** (v1), 0+ **Invoices**. A **Ship Update** is either a *candidate* (Freelancer-only) or *published* (Client-visible). The whole product hinges on that one distinction — see Privacy & Visibility.
 
 ## Information Architecture
 
@@ -33,7 +33,7 @@ Soloist is **two role-keyed responsive web surfaces sharing one design system**,
 | Curation queue | Engagement detail (default tab) | Candidate Ship Updates pulled from GitHub + manual-update authoring; edit, status-tag, dismiss, publish. |
 | Repo Connections | Engagement detail tab | Connect/disconnect GitHub repos; connection-status indicator. |
 | Documents | Engagement detail tab | Create/send Invoices; Draft → Sent → Paid (manual). |
-| Branding & Tenant settings | Account menu | Logo upload + accent picker (with contrast guard), subdomain, neutral default. |
+| Branding & Tenant settings | Account menu | Logo upload + accent picker (with contrast guard), neutral default. |
 | Account | Account menu | Auth, email, password, notification defaults. `[OPEN]` detail undefined in PRD. |
 
 Sidebar visible on `lg+`, collapses to a `Sheet` on smaller viewports. Modal stacks one level deep, never two.
@@ -63,7 +63,7 @@ The single load-bearing behavioral rule. **"The Freelancer's curation is the pri
 - A Ship Update is invisible to the Client until the Freelancer **publishes** it. Candidates live only in the Cockpit curation queue.
 - The Client **never** sees: source code, raw repo contents, commit SHAs, diffs, branch names, unpublished candidates, other Engagements, or anything from another Tenant.
 - **Publishing is the only gate** that makes an update Client-visible *and* fires notifications. There is no silent auto-publish `[ASSUMPTION — PRD implies but does not state "no auto-publish"; treated as a hard rule]`.
-- **Cross-tenant / unknown subdomain → not-found, never denied-with-disclosure.** An unknown `<slug>.cjjutba.com` and an unauthorized Engagement both resolve to the same neutral not-found state — the UI never confirms a resource exists to someone who shouldn't see it.
+- **Cross-tenant / unknown or unauthorized path → not-found, never denied-with-disclosure.** An unknown/unauthorized path and an unauthorized Engagement both resolve to the same neutral not-found state — the UI never confirms a resource exists to someone who shouldn't see it.
 - Founder-readable rendering is enforced at the data boundary, not just styling: the Client-facing model carries only `{title, summary, status, timestamp}` — there is no field that *could* leak a SHA.
 
 ## Per-Tenant Branding system
@@ -124,7 +124,7 @@ Empty and error states carry the "premium" weight — they're where cheap produc
 | Empty — no Invoices | Client Documents | "No documents yet." Quiet, no CTA (the Client can't create one). |
 | **GitHub failure / degraded** | Cockpit | Non-blocking banner on the Engagement: "Couldn't reach GitHub. Auto-updates are paused — your published feed is unaffected. Retry." Manual updates remain available. (Closes rubric NFR-4 done-ness gap — the indicator is a **banner + repo card error state**.) |
 | Token revoked | Repo Connections | Repo card → error: "GitHub access was revoked. Reconnect to resume auto-pull." |
-| **Unknown subdomain / unauthorized** | Client Portal | Neutral **not-found** — never "access denied." Soloist-neutral (no Tenant brand to leak). |
+| **Unknown path / unauthorized Engagement** | Client Portal | Neutral **not-found** — never "access denied." Soloist-neutral (no Tenant brand to leak). |
 | Invite expired | Client invite-accept | "This invite link has expired. Ask CJ to send a new one." No account detail leaked. |
 | Live update arrives | Client feed (active) | New published card animates in at top (honoring `prefers-reduced-motion`) + a toast + an `aria-live="polite"` summary; the insert does **not** move keyboard focus. `[OPEN: real-time vs poll deferred to architecture]` — if poll, surface a "Load new updates" control (itself the announced element) rather than silent insert. |
 | Offline / connection lost | Client feed (mobile) | `[ASSUMPTION]` Last-loaded feed stays readable; a quiet inline banner "You're offline — showing your latest updates" appears, and refresh resumes on reconnect. (Sources mark offline NOT MENTIONED; this one-liner makes the omission a decision, not a gap, given the mobile-first/flaky-4G reality.) |
@@ -160,7 +160,7 @@ Behavioral floor; visual contrast detail lives in `DESIGN.md`.
 - **Cockpit shortcuts (a11y constraints):** every shortcut (`j/k/e/1/2/3/p/x`) also maps to a visible, focusable control (shortcuts are never the only path); single-key shortcuts are **suppressed while a text input/textarea has focus** (prevents `p`/`x` firing mid-edit); a `?` overlay lists them.
 - **Forms** (Branding picker, Invoice builder, Invite/set-password, Manual update): every field has a programmatic `<label>`; hints via `aria-describedby`; errors are `role="alert"`, tied to the field, and never color-only; password requirements stated up front. The contrast-guard rejection is one such announced error.
 - **Images & motion.** Tenant logo `alt="{Tenant name}"` when it's the only naming of the Tenant, `alt=""` when adjacent text already names it (monogram fallback inherits the rule). All entrance/insertion animation honors `prefers-reduced-motion: reduce` (collapses to an instant state change).
-- **not-found-never-denied at the AT layer too:** the unknown-subdomain / unauthorized page reads as ordinary page content with a focused `<h1>` — identical for both causes, no `role="alert"` interruption — so existence is never disclosed to a screen reader either.
+- **not-found-never-denied at the AT layer too:** the unknown-path / unauthorized page reads as ordinary page content with a focused `<h1>` — identical for both causes, no `role="alert"` interruption — so existence is never disclosed to a screen reader either.
 - **The Branding contrast guard is an accessibility control, not just a brand one** — the one place a non-designer Freelancer could otherwise ship unreadable or un-keyboard-navigable Client UI. Full three-check spec lives in Per-Tenant Branding.
 
 ## Responsive & Platform
@@ -195,7 +195,7 @@ Failure: GitHub authorize fails → repo card error + "write one by hand" path s
 
 ### Flow 2 — Maya opens her portal for the first time (UJ-2)
 1. Maya, a non-technical pre-seed founder who paid CJ upfront and is quietly anxious the work is real, gets the invite email (branded with CJ's logo + accent).
-2. She taps it on her phone, sets a password, and lands on `cj.cjjutba.com`.
+2. She taps it on her phone, lands on `soloist.cjjutba.com/invite/<token>`, sets a password, and arrives at `/portal`.
 3. **Onboarding** — a `{components.onboarding-hero}` welcome in CJ's brand, one calm orientation line pointing at the feed. No forms, nothing to learn.
 4. She arrives at the **Ship Feed**.
 5. **Climax:** the very first thing she sees is ✅ *"Set up the authentication system"* and 🚧 *"Building the dashboard"* — in plain English, in CJ's brand, on her phone. Day-one proof she hired someone agency-grade. She closes the tab reassured, having asked nothing.

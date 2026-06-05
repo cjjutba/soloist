@@ -10,5 +10,8 @@ export default defineConfig({
   test: {
     environment: "node",
     include: ["src/**/*.test.ts"],
+    // Story 1.1 (path-based skeleton) has no pure logic to unit-test; tests
+    // resume with the data layer (Story 1.2) and the auth guard (Story 1.4).
+    passWithNoTests: true,
   },
 });

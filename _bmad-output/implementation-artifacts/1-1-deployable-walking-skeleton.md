@@ -5,6 +5,8 @@ baseline_commit: 1584226eedb10d0d280d9f5a621d4728ce0247ea
 
 Status: in-progress
 
+> ⚠️ **Revised 2026-06-06 — routing course-corrected from host-based to PATH-BASED** (single domain `soloist.cjjutba.com`; see `sprint-change-proposal-2026-06-06.md`). The host-routing proxy + `resolveSurface` were removed; surfaces are now native path segments: `/` (landing), `/app` (Cockpit), `/portal` (Client Portal), `/invite/[token]`, plus `not-found`. AC-3, Task 4, the File List, and the Change Log reflect the final path-based implementation; earlier host-routing detail is kept as history.
+
 <!-- Note: Validation is optional. Run validate-create-story for quality check before dev-story. -->
 
 ## Story
@@ -17,7 +19,7 @@ so that deploy + subdomain routing + the design system are proven end-to-end on 
 
 1. **Scaffold builds & runs.** A fresh Next.js 16 app (TypeScript strict, Tailwind v4, App Router, `src/` dir, `@/*` alias, Turbopack) plus `shadcn` init builds and runs locally with no errors. The full core dependency set (AR-1) is installed and committed as the baseline.
 2. **Env contract fails fast.** `src/env.ts` validates the environment with Zod and throws at boot when a required variable is missing. The schema starts minimal (only the vars this story uses) and is extended by later stories.
-3. **Both surfaces route by host.** Deployed on Vercel with `*.cjjutba.com` (wildcard) + `soloist.cjjutba.com`: a request to `soloist.cjjutba.com` resolves the **Cockpit** surface and renders a Cockpit shell; a request to any `<slug>.cjjutba.com` resolves the **Client-Portal** surface (placeholder lookup — no DB yet) and renders a Portal shell; an apex/unrecognized host renders the neutral `not-found` page. Routing works in local dev too.
+3. **Surfaces route by path** *(revised — was host-based)*. Deployed on the single domain `soloist.cjjutba.com`: `/app` renders the **Cockpit**, `/portal` the **Client Portal**, `/` a landing, `/invite/[token]` a pre-auth placeholder, and any unrecognized path renders the neutral `not-found` page. Native Next routing (no proxy). Works in local dev too.
 4. **Design tokens defined.** `globals.css` authors the Tailwind v4 `@theme` with the DESIGN.md token system: Warm Paper, Soloist Ink, warm border/muted, the three fixed status token pairs, the runtime `--tenant-accent` / `--tenant-accent-foreground` / `--tenant-accent-text`, soft radii (sm6/md10/lg14/xl20/full), and the Fraunces (display) / Geist Sans (body) / Geist Mono (numeric) font families wired via `next/font` as CSS variables.
 
 ## Tasks / Subtasks
@@ -36,7 +38,7 @@ so that deploy + subdomain routing + the design system are proven end-to-end on 
   - [x] `src/app/globals.css` defines the full DESIGN.md token set in the Tailwind v4 `@theme` (raw values in `:root` so `--tenant-accent` is runtime-overridable; exposed as utilities).
   - [x] Fonts via `next/font/google`: Fraunces (`--font-fraunces` → `font-display`), Geist (`--font-geist-sans` → `font-sans`), Geist Mono (`--font-geist-mono` → `font-mono`); applied on `<body>`.
   - [x] Verified tokens render (production HTML shows `text-muted-foreground`, `font-display`, etc. on the live responses).
-- [x] **Task 4 — Subdomain routing + surface shells (AC: 3)**
+- [x] **Task 4 — Path-based surface segments + not-found (AC: 3)** *(revised: native `/app`, `/portal`, `/`, `/invite/[token]`; the host-routing proxy + resolveSurface were removed in the 2026-06-06 course correction)*
   - [x] Implemented as `src/proxy.ts` — **[variance]** Next 16 renamed the `middleware.ts` convention to `proxy.ts` (runs on the **Node.js** runtime, not Edge as the architecture noted; host resolution is lightweight so Node is fine). Reads `host`, calls the pure `resolveSurface()`, rewrites to the surface; carries the slug via `x-tenant-slug` header; unknown host → neutral not-found.
   - [x] Surface shells at **`src/app/cockpit/`** + **`src/app/portal/`** — **[variance]** used real internal segments (rewrite targets) instead of `(cockpit)`/`(portal)` route groups, because two route-group `page.tsx` both resolving to `/` is a Next route collision. URLs stay clean via the proxy rewrite. Portal reads the slug header (no DB lookup — Story 1.5). Removed the unreachable root `app/page.tsx`.
   - [x] `src/app/not-found.tsx` — neutral, no Tenant detail (NFR-2).
@@ -121,13 +123,14 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context)
 
 ### File List
 
-**New:** `src/env.ts` · `src/proxy.ts` · `src/lib/resolve-surface.ts` · `src/lib/resolve-surface.test.ts` · `src/lib/utils.ts` · `src/app/providers.tsx` · `src/app/cockpit/layout.tsx` · `src/app/cockpit/page.tsx` · `src/app/portal/layout.tsx` · `src/app/portal/page.tsx` · `src/app/not-found.tsx` · `components.json` · `vitest.config.ts` · `.env.example` · `.env.local` (gitignored) · scaffold baseline (`package.json`, `package-lock.json`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `next-env.d.ts`, `README.md`, `public/`, `node_modules/`)
+**New (final, path-based):** `src/env.ts` · `src/lib/utils.ts` · `src/app/providers.tsx` · `src/app/page.tsx` (landing) · `src/app/app/layout.tsx` · `src/app/app/page.tsx` (Cockpit) · `src/app/portal/layout.tsx` · `src/app/portal/page.tsx` · `src/app/invite/[token]/page.tsx` · `src/app/not-found.tsx` · `components.json` · `vitest.config.ts` · `.env.example` · `.env.local` (gitignored) · scaffold baseline (`package.json`, `package-lock.json`, `next.config.ts`, `tsconfig.json`, `eslint.config.mjs`, `postcss.config.mjs`, `next-env.d.ts`, `README.md`, `public/`, `node_modules/`)
 
 **Modified:** `src/app/layout.tsx` (Fraunces + providers + metadata) · `src/app/globals.css` (DESIGN.md token system) · `.gitignore` (+`.vercel`, `/coverage`)
 
-**Deleted:** `src/app/page.tsx` (unreachable under host routing)
+**Deleted (2026-06-06 course correction):** `src/proxy.ts` · `src/lib/resolve-surface.ts` · `src/lib/resolve-surface.test.ts` · `src/app/cockpit/*` (renamed → `src/app/app/`) — the host-routing layer is no longer needed under path routing.
 
 ## Change Log
 
 - 2026-06-06 — Story 1.1 implemented: Next 16 scaffold + DESIGN.md tokens/fonts + `proxy.ts` host routing (`resolveSurface`) + cockpit/portal/not-found shells + TanStack Query/sonner providers + Zod env contract. Verified locally (build, 11 tests, runtime routing on all four host cases). Task 6 (Vercel deploy + DNS) handed off to CJ.
 - 2026-06-06 — Addressed code-review findings: proxy now forwards the slug via the documented `request.headers` channel **and strips any inbound `x-tenant-slug`** (anti-spoof; pre-empts a cross-tenant hole in Story 1.5); internal-prefix guard uses segment boundaries (no longer false-blocks `/cockpit-*`); `resolveSurface` normalizes trailing-dot FQDNs and rejects multi-level subdomains; added `--radius-full` token; removed the unused `geist` package. Re-verified: 13 tests, build clean, runtime anti-spoof + routing confirmed.
+- 2026-06-06 — **Course correction: host-based → path-based routing** (Sprint Change Proposal; CJ decision). Removed `proxy.ts` + `resolve-surface.*` (+ test); added native segments `/` (landing), `/app` (Cockpit), `/portal`, `/invite/[token]`; simplified `env.ts` (no domain vars needed). Re-verified locally: build/typecheck/lint clean, all routes 200/404 correct. PRD §4/FR-3, UX `EXPERIENCE.md`, `architecture.md`, and `epics.md` updated to match (Story 1.5 superseded by 1.4). Vercel redeploy + unused env-var cleanup follow.
