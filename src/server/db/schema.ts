@@ -113,6 +113,48 @@ export const engagements = pgTable(
   ],
 );
 
+/**
+ * A pending Client invite for one Engagement (Story 2.3). The raw token lives only in the
+ * emailed URL; we store ONLY its SHA-256 hash (`token_hash`) — an account-takeover
+ * credential at rest otherwise (NFR-3). One active invite per Engagement (v1). The accept
+ * flow (Story 2.4) hashes the presented token, looks it up by `token_hash`, and creates
+ * the `ClientAccess` + `User`. ⚠️ Story 2.4: the lookup MUST also enforce
+ * `expires_at > now()` AND `accepted_at IS NULL` (single-use, unexpired) — the columns
+ * exist here but nothing structurally prevents replaying an expired/consumed token.
+ */
+export const invitations = pgTable(
+  "invitations",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    // UNIQUE → one active invite per Engagement; resend replaces the row in place.
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .unique()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    email: text("email").notNull(),
+    // sha256(token) hex — never the raw token. UNIQUE for the pre-auth hash lookup (2.4).
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }), // stamped on accept (2.4)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    // Tenant-scoped for the Freelancer; engagement-scoped for a Client (the clause keys on
+    // engagement_id). Same NULLIF-fail-closed dual-scope shape as `engagements`.
+    pgPolicy("invitation_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
 export type Engagement = typeof engagements.$inferSelect;
+export type Invitation = typeof invitations.$inferSelect;

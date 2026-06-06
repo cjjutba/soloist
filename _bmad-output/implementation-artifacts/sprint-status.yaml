@@ -57,7 +57,7 @@ development_status:
   epic-2: in-progress
   2-1-create-manage-engagement: done
   2-2-engagement-dashboard: done
-  2-3-invite-a-client-engagement-scoped: backlog
+  2-3-invite-a-client-engagement-scoped: done
   2-4-client-accepts-invite-sets-password: backlog
   2-5-branded-premium-onboarding-one-time: backlog
   2-6-client-portal-shell-empty-ship-feed: backlog

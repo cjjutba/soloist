@@ -4,12 +4,12 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branding, engagements, tenants, user } from "../schema";
+import { branding, engagements, invitations, tenants, user } from "../schema";
 import { applyTenantScope } from "../scope";
 
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
-const db = drizzle(client, { schema: { tenants, branding, user, engagements } });
+const db = drizzle(client, { schema: { tenants, branding, user, engagements, invitations } });
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const TENANT_A = uuidv7();
@@ -83,6 +83,26 @@ beforeAll(async () => {
   );
   await asTenant(TENANT_B, (tx) =>
     tx.insert(engagements).values({ id: ENG_B1, tenantId: TENANT_B, clientDisplayName: "Client B", name: "Project B" }),
+  );
+  // Seed one Invitation per Tenant (Story 2.3), scoped so WITH CHECK is exercised.
+  const future = new Date("2030-01-01T00:00:00Z");
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(invitations).values({
+      tenantId: TENANT_A,
+      engagementId: ENG_A1,
+      email: "client-a@example.com",
+      tokenHash: "hash_a",
+      expiresAt: future,
+    }),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(invitations).values({
+      tenantId: TENANT_B,
+      engagementId: ENG_B1,
+      email: "client-b@example.com",
+      tokenHash: "hash_b",
+      expiresAt: future,
+    }),
   );
 });
 
@@ -196,6 +216,46 @@ describe("NFR-2 isolation — engagement-scoped (the Client case, before any Cli
     const rows = await db.transaction(async (tx) => {
       await tx.execute(sql`set local role soloist_app`);
       return tx.select().from(engagements);
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("NFR-2 isolation — invitations (Story 2.3)", () => {
+  it("(m) a Freelancer sees only their own Tenant's invitations", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(invitations));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engagementId).toBe(ENG_A1);
+    expect(rows[0].email).toBe("client-a@example.com");
+  });
+
+  it("(n) cross-tenant: Tenant B sees only its own invitation", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(invitations));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engagementId).toBe(ENG_B1);
+  });
+
+  it("(o) WITH CHECK blocks an invitation forged for ANOTHER Tenant", async () => {
+    // Forge into ENG_A2 (Tenant A, NO existing invitation) with a fresh token hash, so the
+    // ONLY thing that can reject is the WITH CHECK (tenant_id = B ≠ current Tenant A) — not
+    // the engagement_id / token_hash unique constraints.
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(invitations).values({
+          tenantId: TENANT_B,
+          engagementId: ENG_A2,
+          email: "forged@example.com",
+          tokenHash: "hash_forged",
+          expiresAt: new Date("2030-01-01T00:00:00Z"),
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(p) invitations fail closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(invitations);
     });
     expect(rows).toHaveLength(0);
   });
