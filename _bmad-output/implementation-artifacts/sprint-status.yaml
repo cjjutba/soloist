@@ -46,7 +46,7 @@ development_status:
   epic-1: in-progress
   1-1-deployable-walking-skeleton: review
   1-2-tenant-scoped-data-layer-postgres-rls-isolation-core: review
-  1-3-freelancer-sign-up-tenant-provisioning-slug: review
+  1-3-freelancer-sign-up-tenant-provisioning-slug: done
   1-4-authentication-sessions-single-domain-role-guard: backlog
   # 1.5 (subdomain routing) superseded by 1.4 — Tenant resolved from session (path-based course correction, 2026-06-06)
   1-6-per-tenant-branding-contrast-guard: backlog
