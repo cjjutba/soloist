@@ -105,3 +105,14 @@ while testing locally. (For prod, it's `https://soloist.cjjutba.com/api/webhooks
 
 That's the spike validated end-to-end. **Story 3.2** then replaces the single-engagement
 shortcut with the real repo-connection UI, and **3.3+** auto-pull + curate + publish.
+
+---
+
+## Validated 2026-06-06 — operational notes (gotchas hit during Task 8)
+
+- **Local Inngest mode:** `npm run dev` alone runs the Inngest SDK in *cloud* mode (`/api/inngest` → 500 "no signing key"). Set **`INNGEST_DEV=1`** (now pinned in `.env.local`) so local is dev-server mode. The Inngest dev server's autodiscovery probes `localhost:3000`; if the app is on another port, point it explicitly: `npx inngest-cli@latest dev -u http://localhost:<port>/api/inngest`.
+- **Prod sync = a single PUT.** After deploying with `INNGEST_SIGNING_KEY` set, register the app + functions with Inngest Cloud by calling **`curl -X PUT https://soloist.cjjutba.com/api/inngest`** → `{"message":"Successfully registered","modified":true}`. No dashboard step needed. (The Inngest dashboard "Sync new app" with the same URL also works.)
+- **`GET /api/inngest` → 401 in prod is CORRECT.** In cloud mode the introspection route is locked behind the signing key; only Inngest Cloud can call it. A 401 means it's healthy, not broken. (Dev mode returns 200 with open introspection.)
+- **Inngest keys:** the app needs the **Event Key** (`INNGEST_EVENT_KEY`, used by `inngest.send`) and the **Signing Key** (`INNGEST_SIGNING_KEY`, `signkey-prod-…`). The `sk-inn-api…` REST API key and the default ingest key are NOT used by the app.
+- **smee-client on Node ≥ 24:** an SSE `ErrorEvent` can crash it with an unhandled rejection — launch with `NODE_OPTIONS=--unhandled-rejections=warn` so it survives reconnects.
+- **Activation switch:** the GitHub App webhook URL is the smee channel for local testing; **flip it to `https://soloist.cjjutba.com/api/webhooks/github`** for real GitHub events to reach prod.

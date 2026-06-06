@@ -69,8 +69,8 @@ so that the riskiest pipeline (App install, webhooks, local-dev tunnelling, Inng
   - [x] `npm run lint && npm run typecheck && npm test && npm run build` clean; commit `drizzle/0008_*`. Don't regress the 173 prior tests.
   - [x] Apply 0008 to Neon, deploy. The handler + Inngest endpoint ship **inert** (no webhook secret / Inngest key in prod yet → the handler fails closed, no events arrive). **Live end-to-end validation = Task 8 (CJ).**
 
-- [ ] **Task 8 — LIVE validation (CJ + dev, after the App is registered)** (AC: 1, 2, 3)
-  - [ ] CJ registers the GitHub App per `docs/github-app-setup.md` + sets the `GITHUB_APP_*` + `INNGEST_*` secrets (`.env.local` + Vercel). Run the Inngest dev server + smee tunnel locally; install the App on a test repo; push a commit / merge a PR; confirm: the webhook is verified + recorded, the Inngest run fires, **one candidate `ship_updates` row** appears (freelancer-only), a duplicate delivery creates **no** second row. (This is the spike's "it actually works" proof.)
+- [x] **Task 8 — LIVE validation (CJ + dev, after the App is registered)** (AC: 1, 2, 3) — **DONE 2026-06-06, both LOCAL and PROD.**
+  - [x] CJ registered the GitHub App (`Soloist (CJ)`, App ID 3980977) with read-only `contents`/`metadata`/`pull_requests` + `push`/`pull_request`/`release` events, webhook secret set. `GITHUB_APP_WEBHOOK_SECRET` in `.env.local` + Vercel; `INNGEST_EVENT_KEY`/`INNGEST_SIGNING_KEY` in Vercel (local runs `INNGEST_DEV=1`, dev-server mode). **LOCAL** (smee tunnel + Inngest dev server, app on :3002): the App's real `ping` + `installation` deliveries verified (202) + recorded + processed; a signed `push` → **one candidate** (`status_tag=in_progress`, founder-readable title, `raw_meta` SHA-only) on the single active Engagement; same-delivery re-send → 202 dup (no re-enqueue); new-delivery-same-push → no 2nd candidate. **PROD** (`soloist.cjjutba.com` → Inngest Cloud, app self-registered via `PUT /api/inngest` → `{"Successfully registered","modified":true}`): a signed `push` at the live URL round-tripped through Inngest Cloud → one candidate in Neon; both idempotency layers confirmed. Privacy split verified (SHA in `raw_meta`, never in `title`/`summary`). Test data cleaned up afterward. **Remaining activation (operational, CJ):** flip the GitHub App webhook URL from the smee channel → `https://soloist.cjjutba.com/api/webhooks/github` so *real* GitHub pushes hit prod.
 
 ## Dev Notes
 
@@ -209,3 +209,4 @@ The HMAC primitive is sound — timing-safe verify on the raw body read once, be
 | 2026-06-06 | 0.1     | Story drafted (ultimate context engine).                           | Scrum  |
 | 2026-06-06 | 1.0     | Tasks 1–7 implemented; 201 tests green; migration 0008 on Neon.    | Dev    |
 | 2026-06-06 | 1.1     | xhigh code-review: drop-rollback, runtime pins, Sentry, comments.  | Dev    |
+| 2026-06-06 | 1.2     | Task 8 live validation PASSED — local (smee+dev server) + prod (Inngest Cloud). | Dev |
