@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { jsonb, pgPolicy, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { user } from "./auth-schema";
 
@@ -243,6 +243,51 @@ export const shipUpdates = pgTable(
 );
 
 /**
+ * A GitHub repo connected to one Engagement (Story 3.2). Stores ONLY the GitHub App
+ * `installation_id` + `repo_id` (+ `repo_full_name`) — never a long-lived token (NFR-3);
+ * short-lived installation tokens are minted on demand from the App private key. The webhook
+ * pipeline resolves a repo → its Engagement by `repo_full_name` (the system read in
+ * repo-connections.repository), which is why a repo may be ACTIVELY connected to at most one
+ * Engagement (the partial unique below), while many repos can feed one Engagement.
+ */
+export const repoConnections = pgTable(
+  "repo_connections",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    ghInstallationId: text("gh_installation_id").notNull(),
+    ghRepoId: text("gh_repo_id").notNull(),
+    repoFullName: text("repo_full_name").notNull(),
+    // connected | pulling | error | disconnected. 3.2 reaches connected/disconnected;
+    // pulling/error + last_pull_at/last_error are driven by Story 3.3's pull + reconciliation.
+    status: text("status").notNull().default("connected"),
+    lastPullAt: timestamp("last_pull_at", { withTimezone: true }),
+    lastError: text("last_error"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // At most one ACTIVE connection per repo → the webhook resolve-by-full-name is unambiguous;
+    // a disconnected row stays as history + lets the repo be reconnected (a fresh row).
+    uniqueIndex("repo_connections_active_repo")
+      .on(t.repoFullName)
+      .where(sql`status <> 'disconnected'`),
+    // Tenant-scoped for the Freelancer; engagement-scoped — same dual-scope shape as engagements.
+    pgPolicy("repo_connection_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
+/**
  * GitHub webhook idempotency ledger (Story 3.1). Written by the PRE-TENANT webhook handler
  * (it dedupes on `gh_delivery_id` before any Tenant context exists), so — like the Better
  * Auth identity tables — it carries **NO RLS** and is queried as the connection role. It
@@ -265,3 +310,4 @@ export type Invitation = typeof invitations.$inferSelect;
 export type ClientAccess = typeof clientAccess.$inferSelect;
 export type ShipUpdate = typeof shipUpdates.$inferSelect;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
+export type RepoConnection = typeof repoConnections.$inferSelect;

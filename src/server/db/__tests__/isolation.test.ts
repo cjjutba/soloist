@@ -9,6 +9,7 @@ import {
   clientAccess,
   engagements,
   invitations,
+  repoConnections,
   shipUpdates,
   tenants,
   user,
@@ -18,7 +19,7 @@ import { applyTenantScope } from "../scope";
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
 const db = drizzle(client, {
-  schema: { tenants, branding, user, engagements, invitations, clientAccess, shipUpdates },
+  schema: { tenants, branding, user, engagements, invitations, clientAccess, shipUpdates, repoConnections },
 });
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -140,6 +141,25 @@ beforeAll(async () => {
       statusTag: "in_progress",
       title: "WIP: B",
       source: "github",
+    }),
+  );
+  // Seed one connected RepoConnection per Tenant (Story 3.2), scoped so WITH CHECK is exercised.
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(repoConnections).values({
+      tenantId: TENANT_A,
+      engagementId: ENG_A1,
+      ghInstallationId: "inst_a",
+      ghRepoId: "repo_a",
+      repoFullName: "alpha/repo-a",
+    }),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(repoConnections).values({
+      tenantId: TENANT_B,
+      engagementId: ENG_B1,
+      ghInstallationId: "inst_b",
+      ghRepoId: "repo_b",
+      repoFullName: "beta/repo-b",
     }),
   );
 });
@@ -371,6 +391,44 @@ describe("NFR-2 isolation — ship_updates (Story 3.1)", () => {
     const rows = await db.transaction(async (tx) => {
       await tx.execute(sql`set local role soloist_app`);
       return tx.select().from(shipUpdates);
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("NFR-2 isolation — repo_connections (Story 3.2)", () => {
+  it("(y) a Freelancer sees only their own Tenant's RepoConnections", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(repoConnections));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].repoFullName).toBe("alpha/repo-a");
+  });
+
+  it("(z) cross-tenant: Tenant B sees only its own RepoConnection", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(repoConnections));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].repoFullName).toBe("beta/repo-b");
+  });
+
+  it("(aa) WITH CHECK blocks a RepoConnection forged for ANOTHER Tenant", async () => {
+    // Forge into ENG_A2 (Tenant A) stamped tenant_id=B with a fresh repo name → only the
+    // WITH CHECK (tenant_id = B ≠ current Tenant A) can reject (the partial unique can't).
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(repoConnections).values({
+          tenantId: TENANT_B,
+          engagementId: ENG_A2,
+          ghInstallationId: "x",
+          ghRepoId: "x",
+          repoFullName: "forged/repo",
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(ab) repo_connections fail closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(repoConnections);
     });
     expect(rows).toHaveLength(0);
   });
