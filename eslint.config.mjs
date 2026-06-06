@@ -5,6 +5,16 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  // Allow intentionally-unused params/vars prefixed with `_` (e.g. seam params a later story
+  // will use — the Epic-3 `resolveEngagementForRepo(_repoFullName)` spike shortcut).
+  {
+    rules: {
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
+      ],
+    },
+  },
   // NFR-2 choke point: feature code must go through src/server/db repositories +
   // withTenant — never the raw Drizzle client/schema. (The db layer itself is exempt below.)
   {

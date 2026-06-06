@@ -57,6 +57,13 @@
       "when": 1780746606559,
       "tag": "0007_odd_vulcan",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1780751281541,
+      "tag": "0008_clean_albert_cleary",
+      "breakpoints": true
     }
   ]
 }

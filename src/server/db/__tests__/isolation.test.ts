@@ -4,13 +4,21 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branding, clientAccess, engagements, invitations, tenants, user } from "../schema";
+import {
+  branding,
+  clientAccess,
+  engagements,
+  invitations,
+  shipUpdates,
+  tenants,
+  user,
+} from "../schema";
 import { applyTenantScope } from "../scope";
 
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
 const db = drizzle(client, {
-  schema: { tenants, branding, user, engagements, invitations, clientAccess },
+  schema: { tenants, branding, user, engagements, invitations, clientAccess, shipUpdates },
 });
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -114,6 +122,25 @@ beforeAll(async () => {
   );
   await asTenant(TENANT_B, (tx) =>
     tx.insert(clientAccess).values({ tenantId: TENANT_B, engagementId: ENG_B1, userId: "client_b" }),
+  );
+  // Seed one candidate ShipUpdate per Tenant (Story 3.1), scoped so WITH CHECK is exercised.
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(shipUpdates).values({
+      tenantId: TENANT_A,
+      engagementId: ENG_A1,
+      statusTag: "shipped",
+      title: "Shipped: A",
+      source: "github",
+    }),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(shipUpdates).values({
+      tenantId: TENANT_B,
+      engagementId: ENG_B1,
+      statusTag: "in_progress",
+      title: "WIP: B",
+      source: "github",
+    }),
   );
 });
 
@@ -305,6 +332,45 @@ describe("NFR-2 isolation — client_access (Story 2.4)", () => {
     const rows = await db.transaction(async (tx) => {
       await tx.execute(sql`set local role soloist_app`);
       return tx.select().from(clientAccess);
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("NFR-2 isolation — ship_updates (Story 3.1)", () => {
+  it("(u) a Freelancer sees only their own Tenant's ShipUpdates", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(shipUpdates));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engagementId).toBe(ENG_A1);
+    expect(rows[0].title).toBe("Shipped: A");
+  });
+
+  it("(v) cross-tenant: Tenant B sees only its own ShipUpdate", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(shipUpdates));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engagementId).toBe(ENG_B1);
+  });
+
+  it("(w) WITH CHECK blocks a ShipUpdate forged for ANOTHER Tenant", async () => {
+    // Forge into ENG_A2 (Tenant A, no existing ShipUpdate) with tenant_id=B → only the
+    // WITH CHECK (tenant_id = B ≠ current Tenant A) can reject.
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(shipUpdates).values({
+          tenantId: TENANT_B,
+          engagementId: ENG_A2,
+          statusTag: "shipped",
+          title: "forged",
+          source: "github",
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(x) ship_updates fail closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(shipUpdates);
     });
     expect(rows).toHaveLength(0);
   });

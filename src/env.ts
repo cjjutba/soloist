@@ -4,8 +4,6 @@ import { z } from "zod";
  * Validated environment contract. Throws at import time if a required var is
  * missing or invalid — fail fast, never boot half-configured.
  *
- * Later stories extend this schema:
- *   - GITHUB_APP_* / INNGEST_* / BLOB_READ_WRITE_TOKEN → later epics
  */
 const schema = z.object({
   // Neon Postgres connection (pooled endpoint; serverless WebSocket driver).
@@ -41,6 +39,23 @@ const schema = z.object({
   // Sentry server DSN (Story 1.7). Optional: no DSN → Sentry disabled. (The client DSN
   // NEXT_PUBLIC_SENTRY_DSN is read directly in instrumentation-client.ts.)
   SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+
+  // GitHub App (Epic 3 — the Ship Feed moat). All optional/DSN-style so dev + build work
+  // before the App is registered; the webhook handler fails CLOSED (rejects deliveries)
+  // until GITHUB_APP_WEBHOOK_SECRET is set in prod. WEBHOOK_SECRET → HMAC verify (3.1);
+  // PRIVATE_KEY/ID/CLIENT_ID → mint installation tokens + the install link (3.2/3.3).
+  GITHUB_APP_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_PRIVATE_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_CLIENT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  GITHUB_APP_SLUG: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+
+  // Inngest (Epic 3 — durable event pipeline). Optional for the build, but REQUIRED in prod:
+  // Inngest defaults to cloud mode there, so `inngest.send` THROWS without an event key — the
+  // webhook then 500s + Sentry-alerts and GitHub redelivers (the receiver rolls back its ledger
+  // row so nothing is lost). Locally the Inngest dev server needs no keys.
+  INNGEST_EVENT_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  INNGEST_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
 });
 
 const parsed = schema.safeParse(process.env);

@@ -1,7 +1,27 @@
 import { desc, eq, ne, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import { db } from "../index";
 import { withTenant, type TenantContext } from "../context";
 import { engagements, type Engagement } from "../schema";
+
+/**
+ * SPIKE shortcut (Story 3.1): resolve the single active Engagement to attach a GitHub
+ * candidate to, since `repo_connections` (Story 3.2) doesn't exist yet. Raw `db` (the Inngest
+ * pipeline runs as a SYSTEM process with no session). Returns the engagement ONLY if there is
+ * EXACTLY ONE active one (the spike's assumption); 0 or >1 → null (the function no-ops + logs).
+ * **Story 3.2 replaces this with the repo_connections (repo → engagement) lookup.**
+ */
+export async function findSpikeTargetEngagement(): Promise<{
+  tenantId: string;
+  engagementId: string;
+} | null> {
+  const rows = await db
+    .select({ tenantId: engagements.tenantId, engagementId: engagements.id })
+    .from(engagements)
+    .where(eq(engagements.status, "active"))
+    .limit(2);
+  return rows.length === 1 ? rows[0] : null;
+}
 
 /** An Engagement plus the count of unpublished candidate Ship Updates awaiting curation —
  * the dashboard's "needs attention" signal (Story 2.2). */

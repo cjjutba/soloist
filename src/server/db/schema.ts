@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgPolicy, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { jsonb, pgPolicy, pgTable, text, timestamp, unique, uuid } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { user } from "./auth-schema";
 
@@ -195,8 +195,73 @@ export const clientAccess = pgTable(
   ],
 );
 
+/**
+ * A unit of progress on an Engagement (Story 3.1 — the Ship Feed moat). Auto-pulled from
+ * GitHub (or authored by hand) as a `candidate`, then PUBLISHED by an explicit Freelancer
+ * action (Story 3.6) to become Client-visible. **`raw_meta` (SHAs/branches/diffs) is a
+ * SEPARATE column the Client query layer NEVER selects** — the privacy boundary is in the
+ * schema, not just the UI. `state='candidate'` rows are Freelancer-only.
+ */
+export const shipUpdates = pgTable(
+  "ship_updates",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    statusTag: text("status_tag").notNull(), // shipped | in_progress | next (FR-10)
+    title: text("title").notNull(), // founder-readable — never a raw dev artifact
+    summary: text("summary"),
+    state: text("state").notNull().default("candidate"), // candidate | published | dismissed
+    source: text("source").notNull(), // github | manual
+    // Idempotency key for the GitHub pipeline (stable per logical event). UNIQUE per
+    // Engagement so duplicate webhook deliveries / Inngest retries don't dupe. NULL for
+    // manual updates (Postgres treats NULLs as distinct → no false conflicts).
+    sourceEventKey: text("source_event_key"),
+    publishedAt: timestamp("published_at", { withTimezone: true }),
+    // Raw payload detail (SHAs, diffs, full refs) — kept off the founder-facing title/summary,
+    // never client-queried directly. (A candidate's title/summary may name a branch; client
+    // exposure is gated at publish — the Client feed reads only published rows, 3.7.) arch L185.
+    rawMeta: jsonb("raw_meta"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    unique("ship_updates_engagement_source_event_key").on(t.engagementId, t.sourceEventKey),
+    // Tenant-scoped for the Freelancer; engagement-scoped for a Client — same dual-scope
+    // shape as `engagements` (the Client feed in 3.7 reads only published rows, projection-only).
+    pgPolicy("ship_update_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
+/**
+ * GitHub webhook idempotency ledger (Story 3.1). Written by the PRE-TENANT webhook handler
+ * (it dedupes on `gh_delivery_id` before any Tenant context exists), so — like the Better
+ * Auth identity tables — it carries **NO RLS** and is queried as the connection role. It
+ * holds no Tenant data, only delivery metadata.
+ */
+export const webhookEvents = pgTable("webhook_events", {
+  id: uuid("id")
+    .primaryKey()
+    .$defaultFn(() => uuidv7()),
+  ghDeliveryId: text("gh_delivery_id").notNull().unique(),
+  eventType: text("event_type").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+});
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
 export type Engagement = typeof engagements.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
 export type ClientAccess = typeof clientAccess.$inferSelect;
+export type ShipUpdate = typeof shipUpdates.$inferSelect;
+export type WebhookEvent = typeof webhookEvents.$inferSelect;
