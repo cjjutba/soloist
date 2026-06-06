@@ -1,7 +1,21 @@
 import { desc, eq, ne, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { withTenant, type TenantContext } from "../context";
-import { engagements } from "../schema";
+import { engagements, type Engagement } from "../schema";
+
+/** An Engagement plus the count of unpublished candidate Ship Updates awaiting curation —
+ * the dashboard's "needs attention" signal (Story 2.2). */
+export type DashboardEngagement = Engagement & { candidateCount: number };
+
+/** Dashboard sort: last-activity (most recent first), then candidate-count (most first),
+ * so the Engagements that need attention float to the top (FR-7, UX-DR8). Pure + exported
+ * so the secondary key is unit-testable before Epic 3 produces non-zero counts. */
+export function compareDashboard(a: DashboardEngagement, b: DashboardEngagement): number {
+  return (
+    b.lastActivityAt.getTime() - a.lastActivityAt.getTime() ||
+    b.candidateCount - a.candidateCount
+  );
+}
 
 /** Create an Engagement in the caller's Tenant (Story 2.1). The id is generated app-side
  * (uuid v7); the RLS WITH CHECK requires `tenant_id = app.tenant_id`, which `withTenant`
@@ -39,6 +53,17 @@ export async function listEngagements(
       .where(includeArchived ? undefined : ne(engagements.status, "archived"))
       .orderBy(desc(engagements.lastActivityAt)),
   );
+}
+
+/** The dashboard read (Story 2.2): the caller's active Engagements, each with its
+ * candidate count, sorted "needs attention first". */
+export async function listDashboard(ctx: TenantContext): Promise<DashboardEngagement[]> {
+  const rows = await listEngagements(ctx); // active only, RLS-scoped, last-activity desc
+  // Candidate-count seam: Epic 3 replaces this `0` with
+  //   COUNT(ship_updates WHERE engagement_id = e.id AND state = 'candidate').
+  // `ship_updates` doesn't exist yet → 0 for all → the badge is absent (the correct now-state).
+  const withCounts = rows.map((e) => ({ ...e, candidateCount: 0 }));
+  return withCounts.sort(compareDashboard);
 }
 
 /** Read one Engagement (null if it isn't the caller's — RLS returns 0 rows). */

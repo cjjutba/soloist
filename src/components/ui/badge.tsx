@@ -46,3 +46,19 @@ export function StatusBadge({ status }: { status: string }) {
     : "active";
   return <Badge variant={variant}>{STATUS_LABELS[variant]}</Badge>;
 }
+
+/** The "N updates need curation" signal on a Cockpit Engagement row (Story 2.2).
+ * **Absent at zero** (never "0" — DESIGN.md L179). Always **Soloist Iris** (`#5b5bd6`,
+ * a brand constant), NEVER the per-Tenant `--tenant-accent` — the Cockpit wears Soloist's
+ * own chrome. The count renders in `font-mono` (the "Numeric" rule). */
+export function CandidateBadge({ count }: { count: number }) {
+  if (!(count > 0)) return null; // absent at zero — and fail-closed on NaN/negative
+  return (
+    <span
+      className="inline-flex items-center rounded-full bg-[#5b5bd6] px-2 py-0.5 font-mono text-xs font-medium text-white"
+      aria-label={`${count} ${count === 1 ? "update needs" : "updates need"} curation`}
+    >
+      {count}
+    </span>
+  );
+}

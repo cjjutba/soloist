@@ -19,8 +19,11 @@ vi.mock("../index", () => ({
 
 import {
   archiveEngagement,
+  compareDashboard,
   createEngagement,
+  type DashboardEngagement,
   getEngagement,
+  listDashboard,
   listEngagements,
   updateEngagement,
 } from "../repositories/engagements.repository";
@@ -128,5 +131,42 @@ describe("Story 2.1 — Engagements repository (through the NFR-2 choke point)",
     const e = await createEngagement(ctxA(), { name: "Stamped", clientDisplayName: "Client" });
     const [row] = await h.db!.select().from(schema.engagements).where(eq(schema.engagements.id, e.id));
     expect(row.tenantId).toBe(TENANT_A);
+  });
+});
+
+describe("Story 2.2 — Dashboard read + sort", () => {
+  // Minimal DashboardEngagement for the pure comparator (only the sort keys matter).
+  const de = (lastActivityMs: number, candidateCount: number): DashboardEngagement =>
+    ({ lastActivityAt: new Date(lastActivityMs), candidateCount }) as DashboardEngagement;
+
+  it("compareDashboard: last-activity is the PRIMARY key (most recent first)", () => {
+    const older = de(1_000, 9);
+    const newer = de(2_000, 0);
+    expect([older, newer].sort(compareDashboard)).toEqual([newer, older]);
+  });
+
+  it("compareDashboard: candidate-count is the SECONDARY key on equal last-activity", () => {
+    const few = de(5_000, 1);
+    const many = de(5_000, 7);
+    expect([few, many].sort(compareDashboard)).toEqual([many, few]);
+  });
+
+  it("listDashboard returns the active Engagements, candidateCount 0, newest-activity first", async () => {
+    const a = await createEngagement(ctxA(), { name: "D-stale", clientDisplayName: "Client" });
+    const b = await createEngagement(ctxA(), { name: "D-fresh", clientDisplayName: "Client" });
+    await h.db!
+      .update(schema.engagements)
+      .set({ lastActivityAt: new Date("2026-01-01T00:00:00Z") })
+      .where(eq(schema.engagements.id, a.id));
+    await h.db!
+      .update(schema.engagements)
+      .set({ lastActivityAt: new Date("2026-06-01T00:00:00Z") })
+      .where(eq(schema.engagements.id, b.id));
+
+    const dash = await listDashboard(ctxA());
+    expect(dash.every((r) => r.candidateCount === 0)).toBe(true); // Epic 3 seam — absent badge
+    const ids = dash.map((r) => r.id);
+    expect(ids.indexOf(b.id)).toBeLessThan(ids.indexOf(a.id)); // fresher first
+    expect(dash.every((r) => r.status !== "archived")).toBe(true);
   });
 });

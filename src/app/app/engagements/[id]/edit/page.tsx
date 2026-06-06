@@ -2,12 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { requireFreelancer } from "@/server/auth/session";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
+import { isUuid } from "@/lib/uuid";
 import { EngagementForm } from "../../engagement-form";
 import { ArchiveButton } from "../../archive-button";
 
 export const metadata: Metadata = { title: "Edit engagement · Soloist" };
-
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default async function EditEngagementPage({
   params,
@@ -15,8 +14,10 @@ export default async function EditEngagementPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  // A malformed id would hit the uuid column cast and 500; treat it as not-found instead.
-  if (!UUID_RE.test(id)) notFound();
+  // This route lives OUTSIDE the `(detail)` route group, so the detail layout's guard does
+  // NOT cover it — these checks ARE the guard. A malformed id would hit the uuid column
+  // cast and 500; treat it as not-found instead.
+  if (!isUuid(id)) notFound();
   const ctx = await requireFreelancer();
   // RLS-scoped read: an engagement that isn't the caller's returns null → 404 (not denied).
   const engagement = await getEngagement(ctx, id);

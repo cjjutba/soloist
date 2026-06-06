@@ -2,9 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { StatusBadge } from "@/components/ui/badge";
+import { CandidateBadge, StatusBadge } from "@/components/ui/badge";
+import { formatRelativeTime } from "@/lib/relative-time";
 import { requireFreelancer } from "@/server/auth/session";
-import { listEngagements } from "@/server/db/repositories/engagements.repository";
+import { listDashboard } from "@/server/db/repositories/engagements.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
 import { ArchiveButton } from "./engagements/archive-button";
 
@@ -12,7 +13,7 @@ export default async function CockpitPage() {
   // Self-guard via the canonical guard (returns the freelancer principal = a TenantContext),
   // then read THROUGH the repository → withTenant → RLS.
   const session = await requireFreelancer();
-  const [tenant, engagements] = await Promise.all([getTenant(session), listEngagements(session)]);
+  const [tenant, engagements] = await Promise.all([getTenant(session), listDashboard(session)]);
   if (!tenant) notFound(); // session.tenantId is a ghost (deleted Tenant) → deny, don't degrade
 
   return (
@@ -42,14 +43,25 @@ export default async function CockpitPage() {
             <li key={e.id}>
               <Card className="flex items-center justify-between gap-4 p-4">
                 <Link
-                  href={`/app/engagements/${e.id}/edit`}
+                  href={`/app/engagements/${e.id}`}
                   className="flex min-w-0 flex-1 flex-col gap-1 rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <span className="flex items-center gap-2">
                     <span className="truncate font-medium">{e.name}</span>
                     <StatusBadge status={e.status} />
+                    <CandidateBadge count={e.candidateCount} />
                   </span>
-                  <span className="truncate text-sm text-muted-foreground">{e.clientDisplayName}</span>
+                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <span className="truncate">{e.clientDisplayName}</span>
+                    <span aria-hidden>·</span>
+                    <time
+                      dateTime={e.lastActivityAt.toISOString()}
+                      title={e.lastActivityAt.toISOString()}
+                      className="shrink-0 font-mono text-xs"
+                    >
+                      {formatRelativeTime(e.lastActivityAt)}
+                    </time>
+                  </span>
                 </Link>
                 <div className="flex shrink-0 items-center gap-2">
                   <Link

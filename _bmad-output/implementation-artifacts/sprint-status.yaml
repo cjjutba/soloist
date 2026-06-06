@@ -56,7 +56,7 @@ development_status:
   # ── Epic 2: Engagements & the Premium Client Welcome ──
   epic-2: in-progress
   2-1-create-manage-engagement: done
-  2-2-engagement-dashboard: backlog
+  2-2-engagement-dashboard: done
   2-3-invite-a-client-engagement-scoped: backlog
   2-4-client-accepts-invite-sets-password: backlog
   2-5-branded-premium-onboarding-one-time: backlog
