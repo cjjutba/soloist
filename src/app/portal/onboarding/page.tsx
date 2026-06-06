@@ -4,8 +4,8 @@ import { resolveBrandingVars } from "@/server/branding/branding-vars";
 import { getBranding } from "@/server/db/repositories/branding.repository";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
+import { FocusHeading } from "@/components/ui/focus-heading";
 import { OnboardingCta } from "./onboarding-cta";
-import { WelcomeHeading } from "./welcome-heading";
 
 // One-time branded Onboarding hero (Story 2.5, FR-8). Pure reassurance, no input — the
 // fastest path to the day-one "wow". Shown only on the FIRST Client session; once
@@ -35,9 +35,9 @@ export default async function OnboardingPage() {
       )}
 
       <div className="flex flex-col items-center gap-3">
-        <WelcomeHeading>
+        <FocusHeading className="font-display text-4xl">
           Welcome to {tenantName}, {clientName}.
-        </WelcomeHeading>
+        </FocusHeading>
         <p className="max-w-md text-lg text-muted-foreground">
           Here&rsquo;s where you&rsquo;ll see real progress as {tenantName} ships — newest
           first, in plain English. Nothing to set up.

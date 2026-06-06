@@ -18,7 +18,12 @@ vi.mock("@/server/db/repositories/client-access.repository", () => ({
 }));
 
 import { redirect, notFound } from "next/navigation";
-import { getAppSession, requireClient, requireFreelancer } from "../session";
+import {
+  getAppSession,
+  requireClient,
+  requireFreelancer,
+  requireOnboardedClient,
+} from "../session";
 
 const freelancer = {
   user: { id: "u1", name: "Casey", email: "a@example.com", emailVerified: true, tenantId: "t1" },
@@ -134,5 +139,29 @@ describe("requireClient (/portal guard — cross-surface rejection)", () => {
     m.getSession.mockResolvedValue(null);
     await expect(requireClient()).rejects.toThrow("REDIRECT:/login");
     expect(redirect).toHaveBeenCalledWith("/login");
+  });
+});
+
+describe("requireOnboardedClient (/portal surfaces — onboarding gate)", () => {
+  it("returns the client ctx when onboarding is complete", async () => {
+    m.getSession.mockResolvedValue(noTenant);
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt: new Date() });
+    const s = await requireOnboardedClient();
+    expect(s.role).toBe("client");
+    expect(s.engagementId).toBe("e9");
+    expect(redirect).not.toHaveBeenCalled();
+  });
+
+  it("redirects an un-onboarded client to the Onboarding hero", async () => {
+    m.getSession.mockResolvedValue(noTenant);
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt: null });
+    await expect(requireOnboardedClient()).rejects.toThrow("REDIRECT:/portal/onboarding");
+    expect(redirect).toHaveBeenCalledWith("/portal/onboarding");
+  });
+
+  it("not-founds a freelancer presented to a portal surface", async () => {
+    m.getSession.mockResolvedValue(freelancer);
+    await expect(requireOnboardedClient()).rejects.toThrow("NOT_FOUND");
+    expect(notFound).toHaveBeenCalled();
   });
 });

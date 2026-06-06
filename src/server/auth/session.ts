@@ -112,3 +112,15 @@ export async function requireClient(): Promise<ClientSession> {
   }
   return session as ClientSession;
 }
+
+/**
+ * /portal guard for surfaces that require the one-time Onboarding done first (Story 2.6):
+ * the Ship Feed, Documents, Notifications. An un-onboarded Client is routed to the hero. The
+ * portal LAYOUT must NOT use this (it wraps `/portal/onboarding` → a layout redirect would
+ * loop); only the leaf pages do, and the onboarding page checks the opposite condition.
+ */
+export async function requireOnboardedClient(): Promise<ClientSession> {
+  const session = await requireClient();
+  if (!session.onboardedAt) redirect("/portal/onboarding");
+  return session;
+}
