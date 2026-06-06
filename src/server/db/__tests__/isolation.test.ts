@@ -4,12 +4,14 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branding, engagements, invitations, tenants, user } from "../schema";
+import { branding, clientAccess, engagements, invitations, tenants, user } from "../schema";
 import { applyTenantScope } from "../scope";
 
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
-const db = drizzle(client, { schema: { tenants, branding, user, engagements, invitations } });
+const db = drizzle(client, {
+  schema: { tenants, branding, user, engagements, invitations, clientAccess },
+});
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const TENANT_A = uuidv7();
@@ -60,10 +62,12 @@ beforeAll(async () => {
       if (s) await client.exec(s);
     }
   }
-  // Seed the FK owners first (global table, no RLS, no scope needed).
+  // Seed the FK owners + client users first (global table, no RLS, no scope needed).
   await db.insert(user).values([
     { id: OWNER_A, name: "Owner A", email: "owner-a@example.com" },
     { id: OWNER_B, name: "Owner B", email: "owner-b@example.com" },
+    { id: "client_a", name: "Client A", email: "ca@example.com" },
+    { id: "client_b", name: "Client B", email: "cb@example.com" },
   ]);
   // Seed Tenant A and B + branding, each in its own scoped tx (also proves WITH CHECK on insert).
   await asTenant(TENANT_A, async (tx) => {
@@ -103,6 +107,13 @@ beforeAll(async () => {
       tokenHash: "hash_b",
       expiresAt: future,
     }),
+  );
+  // Seed one ClientAccess per Tenant (Story 2.4), scoped so WITH CHECK is exercised.
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(clientAccess).values({ tenantId: TENANT_A, engagementId: ENG_A1, userId: "client_a" }),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(clientAccess).values({ tenantId: TENANT_B, engagementId: ENG_B1, userId: "client_b" }),
   );
 });
 
@@ -256,6 +267,44 @@ describe("NFR-2 isolation — invitations (Story 2.3)", () => {
     const rows = await db.transaction(async (tx) => {
       await tx.execute(sql`set local role soloist_app`);
       return tx.select().from(invitations);
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("NFR-2 isolation — client_access (Story 2.4)", () => {
+  it("(q) a Freelancer sees only their own Tenant's ClientAccess", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(clientAccess));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engagementId).toBe(ENG_A1);
+    expect(rows[0].userId).toBe("client_a");
+  });
+
+  it("(r) cross-tenant: Tenant B sees only its own ClientAccess", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(clientAccess));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].userId).toBe("client_b");
+  });
+
+  it("(s) WITH CHECK blocks a ClientAccess forged for ANOTHER Tenant", async () => {
+    // Forge into ENG_A2 (Tenant A, no existing access) with a fresh user → only the WITH
+    // CHECK (tenant_id = B ≠ current Tenant A) can reject.
+    await db.insert(user).values({ id: "client_forged", name: "F", email: "f@example.com" });
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(clientAccess).values({
+          tenantId: TENANT_B,
+          engagementId: ENG_A2,
+          userId: "client_forged",
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(t) client_access fails closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(clientAccess);
     });
     expect(rows).toHaveLength(0);
   });

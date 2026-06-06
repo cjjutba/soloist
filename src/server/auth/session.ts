@@ -1,5 +1,6 @@
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
+import { findClientAccessByUserId } from "@/server/db/repositories/client-access.repository";
 import { auth } from "./index";
 
 /**
@@ -33,10 +34,19 @@ export type AppSession = {
   emailVerified: boolean;
   tenantId: string | null;
   role: AppRole;
+  // Set only for Clients (Story 2.4) — the one Engagement their ClientAccess scopes them to.
+  engagementId?: string;
 };
 
 /** A guard-validated freelancer principal — also a valid `TenantContext` for the data layer. */
 export type FreelancerSession = AppSession & { role: "freelancer"; tenantId: string };
+
+/** A guard-validated client principal — a valid engagement-scoped `TenantContext`. */
+export type ClientSession = AppSession & {
+  role: "client";
+  tenantId: string;
+  engagementId: string;
+};
 
 export async function getAppSession(): Promise<AppSession | null> {
   const result = await auth.api.getSession({ headers: await headers() });
@@ -48,20 +58,25 @@ export async function getAppSession(): Promise<AppSession | null> {
     emailVerified: boolean;
     tenantId?: string | null;
   };
-  const tenantId = u.tenantId ?? null;
-  // Role is DERIVED from the data model: a user that owns a Tenant (tenantId set) is a
-  // freelancer; else null. ⚠️ EPIC 2: Clients are Users linked to an Engagement via
-  // ClientAccess — this derivation MUST be extended to emit role:"client" (and
-  // requireClient updated) when that lands, or the portal stays permanently 404.
-  const role: AppRole = tenantId ? "freelancer" : null;
-  return {
-    userId: u.id,
-    name: u.name,
-    email: u.email,
-    emailVerified: u.emailVerified,
-    tenantId,
-    role,
-  };
+  const base = { userId: u.id, name: u.name, email: u.email, emailVerified: u.emailVerified };
+
+  // Role is DERIVED from the data model. A user that owns a Tenant (tenantId set) is a
+  // freelancer — short-circuit, no extra query (the 1.4 hot path).
+  if (u.tenantId) {
+    return { ...base, tenantId: u.tenantId, role: "freelancer" };
+  }
+  // Otherwise, a Client? Resolve scope from ClientAccess (Story 2.4) — the bootstrap read
+  // (RLS-bypass, keyed on this session's own userId) that learns (tenantId, engagementId).
+  const access = await findClientAccessByUserId(u.id);
+  if (access) {
+    return {
+      ...base,
+      tenantId: access.tenantId,
+      role: "client",
+      engagementId: access.engagementId,
+    };
+  }
+  return { ...base, tenantId: null, role: null };
 }
 
 /**
@@ -80,17 +95,17 @@ export async function requireFreelancer(): Promise<FreelancerSession> {
 }
 
 /**
- * /portal guard (SCAFFOLD). Clients + Engagements are Epic 2, so today this only
- * enforces the role check — a freelancer (or anonymous) is rejected. The cross-surface
- * guarantee (a freelancer session can never act on the portal) holds now.
- *
- * ⚠️ EPIC 2 (Story 2.6): once `getAppSession` can emit role:"client", resolve the
- * Engagement + ClientAccess here and return a `TenantContext{ role:"client", engagementId }`.
- * Do NOT loosen the check to "any non-freelancer" — bind it to a real ClientAccess row.
+ * /portal guard (Story 2.4). Returns the client principal — an engagement-scoped
+ * `TenantContext` (its `engagementId` comes from the ClientAccess row, never the request).
+ * Unauthenticated → /login; a Freelancer or any non-client → notFound() (the cross-surface
+ * guarantee: a Freelancer session can never act on the portal). The role is bound to a REAL
+ * ClientAccess row (getAppSession), never loosened to "any non-freelancer".
  */
-export async function requireClient(): Promise<{ userId: string }> {
+export async function requireClient(): Promise<ClientSession> {
   const session = await getAppSession();
   if (!session) redirect("/login");
-  if (session.role !== "client") notFound();
-  return { userId: session.userId };
+  if (session.role !== "client" || !session.tenantId || !session.engagementId) {
+    notFound();
+  }
+  return session as ClientSession;
 }

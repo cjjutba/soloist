@@ -154,7 +154,46 @@ export const invitations = pgTable(
   ],
 );
 
+/**
+ * A Client's access grant to exactly one Engagement (Story 2.4), created when they accept
+ * an Invitation. v1 is strictly 1:1:1 — `engagement_id` UNIQUE (one Client per Engagement)
+ * and `user_id` UNIQUE (one Engagement per Client). `getAppSession` resolves a Client's
+ * scope from this row (`engagement_id` comes from HERE, never the request — NFR-2).
+ */
+export const clientAccess = pgTable(
+  "client_access",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .unique()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    // text FK → Better Auth user.id (text, no RLS — like tenants.owner_user_id).
+    userId: text("user_id")
+      .notNull()
+      .unique()
+      .references(() => user.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("client"),
+    invitedAt: timestamp("invited_at", { withTimezone: true }),
+    acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    pgPolicy("client_access_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
 export type Engagement = typeof engagements.$inferSelect;
 export type Invitation = typeof invitations.$inferSelect;
+export type ClientAccess = typeof clientAccess.$inferSelect;

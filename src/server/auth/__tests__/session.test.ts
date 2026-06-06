@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const m = vi.hoisted(() => ({ getSession: vi.fn() }));
+const m = vi.hoisted(() => ({ getSession: vi.fn(), findClientAccess: vi.fn() }));
 
 vi.mock("next/headers", () => ({ headers: async () => new Headers() }));
 vi.mock("next/navigation", () => ({
@@ -13,6 +13,9 @@ vi.mock("next/navigation", () => ({
   }),
 }));
 vi.mock("../index", () => ({ auth: { api: { getSession: m.getSession } } }));
+vi.mock("@/server/db/repositories/client-access.repository", () => ({
+  findClientAccessByUserId: m.findClientAccess,
+}));
 
 import { redirect, notFound } from "next/navigation";
 import { getAppSession, requireClient, requireFreelancer } from "../session";
@@ -24,10 +27,13 @@ const noTenant = {
   user: { id: "u2", name: "Nobody", email: "b@example.com", emailVerified: true, tenantId: null },
 };
 
-beforeEach(() => vi.clearAllMocks());
+beforeEach(() => {
+  vi.clearAllMocks();
+  m.findClientAccess.mockResolvedValue(null); // default: not a client
+});
 
 describe("getAppSession (role derived from the data model, not the cookie)", () => {
-  it("maps a tenant-owning user to role=freelancer", async () => {
+  it("maps a tenant-owning user to role=freelancer WITHOUT a ClientAccess lookup (short-circuit)", async () => {
     m.getSession.mockResolvedValue(freelancer);
     expect(await getAppSession()).toEqual({
       userId: "u1",
@@ -37,9 +43,24 @@ describe("getAppSession (role derived from the data model, not the cookie)", () 
       tenantId: "t1",
       role: "freelancer",
     });
+    expect(m.findClientAccess).not.toHaveBeenCalled(); // freelancer hot path: no extra query
   });
 
-  it("maps a user with no tenant to role=null (clients arrive in Epic 2)", async () => {
+  it("maps a user with a ClientAccess row to role=client + engagementId (Story 2.4)", async () => {
+    m.getSession.mockResolvedValue(noTenant);
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client" });
+    expect(await getAppSession()).toEqual({
+      userId: "u2",
+      name: "Nobody",
+      email: "b@example.com",
+      emailVerified: true,
+      tenantId: "t9",
+      role: "client",
+      engagementId: "e9",
+    });
+  });
+
+  it("maps a user with neither a Tenant nor a ClientAccess to role=null", async () => {
     m.getSession.mockResolvedValue(noTenant);
     expect((await getAppSession())?.role).toBeNull();
   });
@@ -86,6 +107,20 @@ describe("requireFreelancer (/app guard)", () => {
 });
 
 describe("requireClient (/portal guard — cross-surface rejection)", () => {
+  it("returns the client principal (an engagement-scoped TenantContext) for a client session", async () => {
+    m.getSession.mockResolvedValue(noTenant);
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client" });
+    expect(await requireClient()).toEqual({
+      userId: "u2",
+      name: "Nobody",
+      email: "b@example.com",
+      emailVerified: true,
+      tenantId: "t9",
+      role: "client",
+      engagementId: "e9",
+    });
+  });
+
   it("not-founds a freelancer session presented to the portal", async () => {
     m.getSession.mockResolvedValue(freelancer);
     await expect(requireClient()).rejects.toThrow("NOT_FOUND");

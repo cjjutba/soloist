@@ -27,3 +27,15 @@ export async function userExists(id: string): Promise<boolean> {
     .limit(1);
   return row !== undefined;
 }
+
+/** True if a user with this email already exists (Story 2.4 — the accept flow's
+ * existing-email guard; v1 ships the new-Client path, linking is a fast-follow). Email is
+ * stored lowercased by Better Auth; callers pass the normalized invitation email. */
+export async function userExistsByEmail(email: string): Promise<boolean> {
+  const [row] = await db
+    .select({ id: user.id })
+    .from(user)
+    .where(eq(user.email, email))
+    .limit(1);
+  return row !== undefined;
+}
