@@ -1,8 +1,11 @@
+"use client";
+
 import { createAuthClient } from "better-auth/react";
 
 /**
- * Browser auth client. No baseURL → uses the current origin (single domain).
- * No db import here, so this is safe to use from client components.
+ * Browser auth client (`better-auth/react`, hooks/stores). The "use client" directive
+ * makes a stray Server Component import fail loudly at build instead of at runtime.
+ * No db/server-auth import here.
  */
 export const authClient = createAuthClient();
 

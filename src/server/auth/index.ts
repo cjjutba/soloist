@@ -31,6 +31,14 @@ export const auth = betterAuth({
     minPasswordLength: 8,
   },
 
+  // Session policy (Story 1.4): 7-day absolute expiry, 1-day sliding refresh.
+  // NOTE: cookieCache is intentionally NOT enabled — every getSession re-validates
+  // against the `session` table, so the role guard never trusts a stale cookie (AC-2).
+  session: {
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
+  },
+
   emailVerification: {
     sendOnSignUp: true,
     autoSignInAfterVerification: true,
