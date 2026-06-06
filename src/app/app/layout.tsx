@@ -19,10 +19,10 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
         </Link>
         <nav className="flex items-center gap-4">
           <Link
-            href="/app/settings/branding"
+            href="/app/settings/account"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            Branding
+            Settings
           </Link>
           <LogoutButton />
         </nav>

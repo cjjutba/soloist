@@ -12,7 +12,7 @@ export default async function BrandingSettingsPage() {
   const [tenant, branding] = await Promise.all([getTenant(ctx), getBranding(ctx)]);
 
   return (
-    <main className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6 sm:p-8">
+    <section className="flex flex-col gap-6">
       <header>
         <h1 className="font-display text-3xl">Branding</h1>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -25,6 +25,6 @@ export default async function BrandingSettingsPage() {
         initialAccent={branding?.accentHex ?? null}
         initialLogoUrl={branding?.logoBlobUrl ?? null}
       />
-    </main>
+    </section>
   );
 }

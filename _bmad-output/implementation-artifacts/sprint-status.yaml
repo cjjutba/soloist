@@ -50,7 +50,7 @@ development_status:
   1-4-authentication-sessions-single-domain-role-guard: done
   # 1.5 (subdomain routing) superseded by 1.4 — Tenant resolved from session (path-based course correction, 2026-06-06)
   1-6-per-tenant-branding-contrast-guard: done
-  1-7-cockpit-account-settings-observability-ci-baseline: backlog
+  1-7-cockpit-account-settings-observability-ci-baseline: review
   epic-1-retrospective: optional
 
   # ── Epic 2: Engagements & the Premium Client Welcome ──

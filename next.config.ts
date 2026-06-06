@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import { withSentryConfig } from "@sentry/nextjs";
 
 const nextConfig: NextConfig = {
   reactCompiler: true,
@@ -14,4 +15,13 @@ const nextConfig: NextConfig = {
   experimental: { serverActions: { bodySizeLimit: "2mb" } },
 };
 
-export default nextConfig;
+// Sentry (Story 1.7). Source-map upload only runs when SENTRY_AUTH_TOKEN is present;
+// otherwise this just enables the error-capture wiring. DSN-optional (see sentry.*.config).
+export default withSentryConfig(nextConfig, {
+  // Quiet by default — without an auth token (no source-map upload) the plugin would
+  // otherwise warn on every CI build for no actionable reason.
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+});

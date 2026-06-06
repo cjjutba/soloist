@@ -28,6 +28,7 @@ export type AppRole = "freelancer" | "client" | null;
 
 export type AppSession = {
   userId: string;
+  name: string;
   email: string;
   emailVerified: boolean;
   tenantId: string | null;
@@ -42,6 +43,7 @@ export async function getAppSession(): Promise<AppSession | null> {
   if (!result?.user) return null;
   const u = result.user as {
     id: string;
+    name: string;
     email: string;
     emailVerified: boolean;
     tenantId?: string | null;
@@ -54,6 +56,7 @@ export async function getAppSession(): Promise<AppSession | null> {
   const role: AppRole = tenantId ? "freelancer" : null;
   return {
     userId: u.id,
+    name: u.name,
     email: u.email,
     emailVerified: u.emailVerified,
     tenantId,

@@ -37,6 +37,10 @@ const schema = z.object({
   // without it; only logo upload needs it. Vercel auto-injects this when a Blob store
   // is linked to the project.
   BLOB_READ_WRITE_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+
+  // Sentry server DSN (Story 1.7). Optional: no DSN → Sentry disabled. (The client DSN
+  // NEXT_PUBLIC_SENTRY_DSN is read directly in instrumentation-client.ts.)
+  SENTRY_DSN: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
 });
 
 const parsed = schema.safeParse(process.env);

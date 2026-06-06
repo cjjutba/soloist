@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { withTenant, type TenantContext } from "../context";
 import { tenants, user } from "../schema";
@@ -105,6 +105,10 @@ export async function provisionTenant(input: {
  * Defense-in-depth: the `tenant_self` RLS policy only binds `id = app.tenant_id`, not
  * the owner — so we ALSO require `owner_user_id = ownerUserId` in the predicate. A
  * caller can never activate a Tenant it doesn't own (0 rows updated if mismatched).
+ *
+ * Idempotent: `activated_at` is stamped only while NULL. Better Auth fires
+ * afterEmailVerification for BOTH initial sign-up and later email changes, so without
+ * the `isNull` guard an email change would reset the original activation timestamp.
  */
 export async function activateTenant(ownerUserId: string, tenantId: string) {
   return withTenant(
@@ -113,7 +117,13 @@ export async function activateTenant(ownerUserId: string, tenantId: string) {
       tx
         .update(tenants)
         .set({ activatedAt: sql`now()` })
-        .where(and(eq(tenants.id, tenantId), eq(tenants.ownerUserId, ownerUserId)))
+        .where(
+          and(
+            eq(tenants.id, tenantId),
+            eq(tenants.ownerUserId, ownerUserId),
+            isNull(tenants.activatedAt),
+          ),
+        )
         .returning(),
   );
 }

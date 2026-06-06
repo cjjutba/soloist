@@ -56,6 +56,10 @@ export const auth = betterAuth({
     additionalFields: {
       tenantId: { type: "string", required: false, input: false },
     },
+    // Change-email (Story 1.7): Better Auth sends a verification to the NEW address via
+    // emailVerification.sendVerificationEmail (already wired); the email updates only
+    // after it's confirmed.
+    changeEmail: { enabled: true },
   },
 
   // nextCookies MUST be the last plugin (handles Set-Cookie in Server Actions).

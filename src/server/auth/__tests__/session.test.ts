@@ -18,10 +18,10 @@ import { redirect, notFound } from "next/navigation";
 import { getAppSession, requireClient, requireFreelancer } from "../session";
 
 const freelancer = {
-  user: { id: "u1", email: "a@example.com", emailVerified: true, tenantId: "t1" },
+  user: { id: "u1", name: "Casey", email: "a@example.com", emailVerified: true, tenantId: "t1" },
 };
 const noTenant = {
-  user: { id: "u2", email: "b@example.com", emailVerified: true, tenantId: null },
+  user: { id: "u2", name: "Nobody", email: "b@example.com", emailVerified: true, tenantId: null },
 };
 
 beforeEach(() => vi.clearAllMocks());
@@ -31,6 +31,7 @@ describe("getAppSession (role derived from the data model, not the cookie)", () 
     m.getSession.mockResolvedValue(freelancer);
     expect(await getAppSession()).toEqual({
       userId: "u1",
+      name: "Casey",
       email: "a@example.com",
       emailVerified: true,
       tenantId: "t1",
@@ -54,6 +55,7 @@ describe("requireFreelancer (/app guard)", () => {
     m.getSession.mockResolvedValue(freelancer);
     expect(await requireFreelancer()).toEqual({
       userId: "u1",
+      name: "Casey",
       email: "a@example.com",
       emailVerified: true,
       tenantId: "t1",

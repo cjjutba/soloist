@@ -72,12 +72,18 @@ describe("Story 1.3 — Tenant provisioning (inside the NFR-2 choke point)", () 
     ).rejects.toBeInstanceOf(AlreadyProvisionedError);
   });
 
-  it("activateTenant stamps activated_at for the owner (AC-2)", async () => {
+  it("activateTenant stamps activated_at once, idempotently (AC-2)", async () => {
     const t = await provisionTenant({ ownerUserId: "u5", slug: "studio-5", name: "Studio 5" });
     expect(t.activatedAt).toBeNull();
-    await activateTenant("u5", t.id);
-    const got = await getTenant({ ...fc("u5"), tenantId: t.id });
-    expect(got?.activatedAt).not.toBeNull();
+    const first = await activateTenant("u5", t.id);
+    expect(first).toHaveLength(1); // stamped
+    const stampedAt = (await getTenant({ ...fc("u5"), tenantId: t.id }))?.activatedAt;
+    expect(stampedAt).not.toBeNull();
+    // Re-activation (e.g. an email change re-firing afterEmailVerification) is a no-op.
+    const second = await activateTenant("u5", t.id);
+    expect(second).toHaveLength(0); // already active → not re-stamped
+    const after = (await getTenant({ ...fc("u5"), tenantId: t.id }))?.activatedAt;
+    expect(after).toEqual(stampedAt);
   });
 
   it("activateTenant does NOT activate a Tenant the caller doesn't own (owner-binding)", async () => {
