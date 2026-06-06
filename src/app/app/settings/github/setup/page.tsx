@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { requireFreelancer } from "@/server/auth/session";
 import { recordInstallation } from "@/server/db/repositories/github-installations.repository";
 import { getUserInstallations, isOauthConfigured } from "@/server/github/app";
+import { isUuid } from "@/lib/uuid";
 import { Card } from "@/components/ui/card";
 
 /**
@@ -14,10 +15,13 @@ import { Card } from "@/components/ui/card";
 export default async function GithubSetupPage({
   searchParams,
 }: {
-  searchParams: Promise<{ code?: string; installation_id?: string; setup_action?: string }>;
+  searchParams: Promise<{ code?: string; installation_id?: string; setup_action?: string; state?: string }>;
 }) {
   const ctx = await requireFreelancer();
-  const { code, installation_id } = await searchParams;
+  const { code, installation_id, state } = await searchParams;
+  // `state` is the Engagement id we passed into the install link — send the Freelancer back to
+  // its Repo Connections tab (with a flag the tab turns into a success toast), else the Cockpit.
+  const dest = state && isUuid(state) ? `/app/engagements/${state}/repos?installed=1` : "/app";
 
   const fail = (msg: string) => (
     <main className="mx-auto flex w-full max-w-md flex-1 flex-col gap-4 p-8">
@@ -54,5 +58,5 @@ export default async function GithubSetupPage({
   } catch {
     return fail("Couldn’t save the installation. Please try again.");
   }
-  redirect("/app"); // outside the try — NEXT_REDIRECT must not be swallowed
+  redirect(dest); // outside the try — NEXT_REDIRECT must not be swallowed
 }

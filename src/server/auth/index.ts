@@ -29,6 +29,10 @@ export const auth = betterAuth({
     // so the Tenant is unreachable until the email is confirmed.
     requireEmailVerification: true,
     minPasswordLength: 8,
+    // Don't auto-sign-in right after sign-up: with requireEmailVerification, the post-signup
+    // sign-in attempt hits the unverified account and RE-SENDS the verification email (the
+    // duplicate). The user is signed in by `autoSignInAfterVerification` once they confirm.
+    autoSignIn: false,
   },
 
   // Session policy (Story 1.4): 7-day absolute expiry, 1-day sliding refresh.

@@ -7,10 +7,12 @@ import {
 } from "@/server/db/repositories/repo-connections.repository";
 import { isGithubConfigured, listReposForInstallations, type ConnectableRepo } from "@/server/github/app";
 import { githubInstallUrl } from "@/server/github/install-url";
+import { Suspense } from "react";
 import { isUuid } from "@/lib/uuid";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConnectRepoForm } from "./connect-repo-form";
+import { InstallToast } from "./install-toast";
 import { RepoConnectionCard } from "./repo-connection-card";
 
 /** Repo Connections tab (Stories 3.2 / 3.2.1). Lists/connects only repos from THIS Tenant's own
@@ -52,10 +54,13 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
     return true;
   });
 
-  const installUrl = githubInstallUrl();
+  const installUrl = githubInstallUrl(id); // carry the engagement through the install round-trip
 
   return (
     <div className="flex flex-col gap-6">
+      <Suspense fallback={null}>
+        <InstallToast />
+      </Suspense>
       {!configured ? (
         <Card className="flex flex-col items-center gap-2 p-12 text-center">
           <p className="font-medium">Connect GitHub isn’t set up yet</p>
