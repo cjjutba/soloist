@@ -181,6 +181,9 @@ export const clientAccess = pgTable(
     role: text("role").notNull().default("client"),
     invitedAt: timestamp("invited_at", { withTimezone: true }),
     acceptedAt: timestamp("accepted_at", { withTimezone: true }).notNull().defaultNow(),
+    // Stamped when the Client finishes the one-time branded Onboarding (Story 2.5);
+    // null = not yet onboarded → route them through the hero.
+    onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [

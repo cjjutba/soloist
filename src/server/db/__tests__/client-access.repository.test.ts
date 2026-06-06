@@ -18,6 +18,7 @@ import {
   acceptInvitationTx,
   findClientAccessByUserId,
   InvitationAlreadyAcceptedError,
+  markOnboarded,
 } from "../repositories/client-access.repository";
 import {
   findInvitationByTokenHash,
@@ -114,5 +115,28 @@ describe("Story 2.4 — pre-auth + scope-resolution reads", () => {
       .from(schema.clientAccess)
       .where(eq(schema.clientAccess.engagementId, ENG_A));
     expect(all).toHaveLength(1);
+  });
+
+  it("markOnboarded stamps onboarded_at once, idempotently (Story 2.5)", async () => {
+    const clientCtx: TenantContext = {
+      tenantId: TENANT_A,
+      engagementId: ENG_A,
+      userId: "client_user",
+      role: "client",
+    };
+    await markOnboarded(clientCtx);
+    const [first] = await h.db!
+      .select()
+      .from(schema.clientAccess)
+      .where(eq(schema.clientAccess.engagementId, ENG_A));
+    expect(first.onboardedAt).not.toBeNull();
+
+    // A second call is a no-op (the IS NULL guard) — the timestamp is unchanged.
+    await markOnboarded(clientCtx);
+    const [second] = await h.db!
+      .select()
+      .from(schema.clientAccess)
+      .where(eq(schema.clientAccess.engagementId, ENG_A));
+    expect(second.onboardedAt).toEqual(first.onboardedAt);
   });
 });

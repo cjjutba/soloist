@@ -1,0 +1,1 @@
+ALTER TABLE "client_access" ADD COLUMN "onboarded_at" timestamp with time zone;

@@ -1,15 +1,20 @@
-export default function PortalPage() {
-  // Served at /portal/*. The Client's Engagement + Tenant branding are resolved
-  // from the authenticated session (Story 1.4 / Epic 2) — no tenant in the URL.
+import { redirect } from "next/navigation";
+import { requireClient } from "@/server/auth/session";
+
+// The Ship Feed home (Story 2.5 gates it; Story 2.6 builds the real empty feed). An
+// un-onboarded Client is routed through the one-time branded Onboarding hero first.
+export default async function PortalPage() {
+  const session = await requireClient();
+  if (!session.onboardedAt) redirect("/portal/onboarding");
+
   return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-background p-6 text-foreground">
+    <main className="mx-auto flex min-h-dvh w-full max-w-2xl flex-col items-center justify-center gap-3 p-6">
       <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
-        Client Portal
+        Ship Feed
       </p>
-      <h1 className="text-center font-display text-3xl">Your workspace</h1>
+      <h1 className="text-center font-display text-3xl">You&rsquo;re all set</h1>
       <p className="max-w-sm text-center text-muted-foreground">
-        Walking skeleton — branded onboarding and the live Ship Feed arrive in Epics&nbsp;2
-        &amp; 3. Your freelancer&rsquo;s brand applies here once you&rsquo;re signed in.
+        Your first update will land here soon. The live Ship Feed arrives in Epic&nbsp;3.
       </p>
     </main>
   );

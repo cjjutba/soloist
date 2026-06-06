@@ -46,9 +46,10 @@ describe("getAppSession (role derived from the data model, not the cookie)", () 
     expect(m.findClientAccess).not.toHaveBeenCalled(); // freelancer hot path: no extra query
   });
 
-  it("maps a user with a ClientAccess row to role=client + engagementId (Story 2.4)", async () => {
+  it("maps a user with a ClientAccess row to role=client + engagementId + onboardedAt (Story 2.4/2.5)", async () => {
     m.getSession.mockResolvedValue(noTenant);
-    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client" });
+    const onboardedAt = new Date("2026-06-02T00:00:00Z");
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt });
     expect(await getAppSession()).toEqual({
       userId: "u2",
       name: "Nobody",
@@ -57,6 +58,7 @@ describe("getAppSession (role derived from the data model, not the cookie)", () 
       tenantId: "t9",
       role: "client",
       engagementId: "e9",
+      onboardedAt,
     });
   });
 
@@ -109,7 +111,7 @@ describe("requireFreelancer (/app guard)", () => {
 describe("requireClient (/portal guard — cross-surface rejection)", () => {
   it("returns the client principal (an engagement-scoped TenantContext) for a client session", async () => {
     m.getSession.mockResolvedValue(noTenant);
-    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client" });
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt: null });
     expect(await requireClient()).toEqual({
       userId: "u2",
       name: "Nobody",
@@ -118,6 +120,7 @@ describe("requireClient (/portal guard — cross-surface rejection)", () => {
       tenantId: "t9",
       role: "client",
       engagementId: "e9",
+      onboardedAt: null,
     });
   });
 

@@ -36,6 +36,8 @@ export type AppSession = {
   role: AppRole;
   // Set only for Clients (Story 2.4) — the one Engagement their ClientAccess scopes them to.
   engagementId?: string;
+  // Client Onboarding flag (Story 2.5): null = not yet onboarded → route through the hero.
+  onboardedAt?: Date | null;
 };
 
 /** A guard-validated freelancer principal — also a valid `TenantContext` for the data layer. */
@@ -74,6 +76,7 @@ export async function getAppSession(): Promise<AppSession | null> {
       tenantId: access.tenantId,
       role: "client",
       engagementId: access.engagementId,
+      onboardedAt: access.onboardedAt, // already on the fetched row — no extra query
     };
   }
   return { ...base, tenantId: null, role: null };

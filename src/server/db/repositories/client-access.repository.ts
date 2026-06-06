@@ -29,6 +29,22 @@ export async function findClientAccessByUserId(userId: string) {
 }
 
 /**
+ * Stamp the Client's one-time Onboarding as complete (Story 2.5). Scoped (RLS restricts to
+ * the caller's engagement) AND filtered by `engagement_id` defensively. The `IS NULL` guard
+ * makes it idempotent — a double-tap or a re-fire is a no-op.
+ */
+export async function markOnboarded(ctx: TenantContext): Promise<void> {
+  const engagementId = ctx.engagementId;
+  if (!engagementId) return; // client ctx only (a freelancer ctx has none)
+  await withTenant(ctx, async (tx) => {
+    await tx
+      .update(clientAccess)
+      .set({ onboardedAt: sql`now()` })
+      .where(and(eq(clientAccess.engagementId, engagementId), isNull(clientAccess.onboardedAt)));
+  });
+}
+
+/**
  * Accept an invite atomically (Story 2.4): in ONE transaction, INSERT the `ClientAccess`
  * grant AND stamp `invitations.accepted_at`. `ctx` is the INVITATION-DERIVED scope
  * (`{ tenantId, engagementId, userId, role:"client" }`) — both writes satisfy their
