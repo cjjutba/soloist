@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { requireFreelancer } from "@/server/auth/session";
 import { LogoutButton } from "./logout-button";
@@ -10,10 +11,21 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   return (
     <div data-surface="cockpit" className="flex min-h-dvh flex-col bg-background text-foreground">
       <header className="flex items-center justify-between border-b border-border px-6 py-3">
-        <span className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
+        <Link
+          href="/app"
+          className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-foreground"
+        >
           Soloist · Cockpit
-        </span>
-        <LogoutButton />
+        </Link>
+        <nav className="flex items-center gap-4">
+          <Link
+            href="/app/settings/branding"
+            className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          >
+            Branding
+          </Link>
+          <LogoutButton />
+        </nav>
       </header>
       <div className="flex-1">{children}</div>
     </div>

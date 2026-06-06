@@ -32,6 +32,11 @@ const schema = z.object({
     (v) => (v === "" ? undefined : v),
     z.string().default("onboarding@resend.dev"),
   ),
+
+  // Vercel Blob — Tenant logos (Story 1.6). Optional: the accent contrast guard works
+  // without it; only logo upload needs it. Vercel auto-injects this when a Blob store
+  // is linked to the project.
+  BLOB_READ_WRITE_TOKEN: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
 });
 
 const parsed = schema.safeParse(process.env);
