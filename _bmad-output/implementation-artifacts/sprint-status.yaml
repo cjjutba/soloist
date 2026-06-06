@@ -54,14 +54,14 @@ development_status:
   epic-1-retrospective: done
 
   # ── Epic 2: Engagements & the Premium Client Welcome ──
-  epic-2: in-progress
+  epic-2: done
   2-1-create-manage-engagement: done
   2-2-engagement-dashboard: done
   2-3-invite-a-client-engagement-scoped: done
   2-4-client-accepts-invite-sets-password: done
   2-5-branded-premium-onboarding-one-time: done
   2-6-client-portal-shell-empty-ship-feed: done
-  epic-2-retrospective: optional
+  epic-2-retrospective: done
 
   # ── Epic 3: The Live Ship Feed — GitHub → Curate → Publish (the moat) ──
   epic-3: backlog
