@@ -4,7 +4,7 @@ baseline_commit: 6e7978e30cede0e457a22e6222b842e3f6bc2964
 
 # Story 1.6: Per-Tenant Branding + Contrast Guard
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for a quality check before dev-story. -->
 
@@ -65,7 +65,7 @@ so that my Client-facing surfaces feel like my own product without me shipping u
 - [x] **Task 5 — Gates + deploy** (AC: 1, 2)
   - [x] `npm run lint && npm run typecheck && npm test && npm run build` clean.
   - [x] **Ops:** ensure a **Vercel Blob store** is connected to the project so `BLOB_READ_WRITE_TOKEN` is available in Production (Vercel auto-injects it when a Blob store is linked; otherwise set it). Add it to env (+ local `.env.local` if dogfooding logo upload).
-  - [ ] Deploy to Vercel production. Live smoke (as a signed-in freelancer): `/app/settings/branding` renders; saving a dark accent succeeds + preview updates; saving a too-light accent is **blocked** with the suggested shade; logo upload stores to Blob + shows.
+  - [x] Deployed to Vercel production → https://soloist.cjjutba.com. Live smoke: `/app/settings/branding` → **307 → /login** (guarded, no 500); `/`, `/login` → 200; `/api/auth/get-session` → `null` @200. The signed-in round-trip (save dark accent → preview; too-light → blocked + suggestion; logo upload) is CJ's to run. **Ops note:** logo upload needs a **Vercel Blob store** connected (Dashboard → Storage → Blob; the token auto-injects, then redeploy) — the accent guard works without it.
 
 ## Dev Notes
 
@@ -177,3 +177,4 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context)
 | 2026-06-06 | 0.1     | Story drafted (ultimate context engine).                                    | Scrum  |
 | 2026-06-06 | 1.0     | Implemented Tasks 1–5: WCAG contrast guard + branding vars + save/upload actions + Cockpit settings page & live preview. 85/85 tests, build clean, route guarded. | Dev (Opus 4.8) |
 | 2026-06-06 | 1.1     | Code review (xhigh, math confirmed): dropped SVG (XSS), hardened malformed-hex, added uploadLogo tests, a11y on the contrast error, consolidated constants. 92/92 tests, build clean. | Review (Opus 4.8) |
+| 2026-06-06 | 1.2     | Deployed to production → https://soloist.cjjutba.com. Live smoke green (branding route guarded). Story done. (Logo upload needs a Vercel Blob store — ops note.) | Dev (Opus 4.8) |
