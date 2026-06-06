@@ -4,7 +4,7 @@ baseline_commit: c5578ca224bfea368030dc805c7e5d6f0ba96594
 
 # Story 1.4: Authentication, Sessions & Single-Domain Role Guard
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for a quality check before dev-story. -->
 
@@ -61,7 +61,7 @@ so that my workspace is protected and a Client's portal session can never act on
 
 - [x] **Task 5 — Gates + deploy** (AC: 1, 2, 3)
   - [x] `npm run lint && npm run typecheck && npm test && npm run build` clean.
-  - [ ] Deploy to Vercel production (env already set in Story 1.3). Live smoke: `/login` renders; logged-out `/app` → 302 `/login`; sign-in → `/app` greets by Tenant name; logout → `/`; `/portal` while signed in as a freelancer → 404.
+  - [x] Deployed to Vercel production (`dpl_…n7x6tu6nu`) → https://soloist.cjjutba.com. Live smoke: unauthenticated `/app` + `/portal` → **307 → /login**, `/login`/`/signup`/`/` → 200, `/api/auth/get-session` → `null` @200. Authenticated round-trip (sign-in → Cockpit greets by Tenant → logout → `/`; freelancer on `/portal` → 404) is CJ's to run (needs a verified account).
 
 ## Dev Notes
 
@@ -175,3 +175,4 @@ claude-opus-4-8 (Claude Opus 4.8, 1M context)
 | 2026-06-06 | 0.1     | Story drafted (ultimate context engine).                                    | Scrum  |
 | 2026-06-06 | 1.0     | Implemented Tasks 1–5: session policy + server-side role guard, login/logout, signed-in Cockpit. 67/67 tests, build clean, local guard smoke green. | Dev (Opus 4.8) |
 | 2026-06-06 | 1.1     | Code review (xhigh, guard fail-closed): page→canonical guard, emailVerified enforcement, login/logout try-catch, "use client" on client, shared Field, Epic-2/positional-guard docs. 68/68 tests, build clean. | Review (Opus 4.8) |
+| 2026-06-06 | 1.2     | Deployed to production → https://soloist.cjjutba.com (READY). Live guard smoke green (unauth /app + /portal → 307 /login). Story done. | Dev (Opus 4.8) |
