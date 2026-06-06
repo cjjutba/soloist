@@ -4,12 +4,12 @@ import { drizzle } from "drizzle-orm/pglite";
 import { eq, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { beforeAll, describe, expect, it } from "vitest";
-import { branding, tenants, user } from "../schema";
+import { branding, engagements, tenants, user } from "../schema";
 import { applyTenantScope } from "../scope";
 
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
-const db = drizzle(client, { schema: { tenants, branding, user } });
+const db = drizzle(client, { schema: { tenants, branding, user, engagements } });
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
 const TENANT_A = uuidv7();
@@ -18,6 +18,11 @@ const TENANT_B = uuidv7();
 // needs real owner rows (the user table is global / has no RLS).
 const OWNER_A = "owner_a";
 const OWNER_B = "owner_b";
+// Story 2.1: two Engagements in Tenant A (E1/E2) + one in Tenant B — the fixture
+// that proves a Client scoped to E1 can never see E2 of the same Tenant.
+const ENG_A1 = uuidv7();
+const ENG_A2 = uuidv7();
+const ENG_B1 = uuidv7();
 
 /**
  * Mirrors production exactly: open a transaction and call the REAL `applyTenantScope`,
@@ -30,6 +35,19 @@ const OWNER_B = "owner_b";
 async function asTenant<T>(tenantId: string, fn: (tx: Tx) => Promise<T>): Promise<T> {
   return db.transaction(async (tx) => {
     await applyTenantScope(tx, { tenantId });
+    return fn(tx);
+  });
+}
+
+/** Like asTenant but ALSO sets app.engagement_id — mirrors a Client request scoped to
+ * one Engagement (Story 2.1 / pre-mortem guardrail #5). */
+async function asClient<T>(
+  tenantId: string,
+  engagementId: string,
+  fn: (tx: Tx) => Promise<T>,
+): Promise<T> {
+  return db.transaction(async (tx) => {
+    await applyTenantScope(tx, { tenantId, engagementId });
     return fn(tx);
   });
 }
@@ -56,6 +74,16 @@ beforeAll(async () => {
     await tx.insert(tenants).values({ id: TENANT_B, slug: "beta", name: "Beta", ownerUserId: OWNER_B });
     await tx.insert(branding).values({ tenantId: TENANT_B, accentHex: "#bbbbbb" });
   });
+  // Seed Engagements (scoped, so the WITH CHECK is exercised on insert too).
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(engagements).values([
+      { id: ENG_A1, tenantId: TENANT_A, clientDisplayName: "Client One", name: "Project One" },
+      { id: ENG_A2, tenantId: TENANT_A, clientDisplayName: "Client Two", name: "Project Two" },
+    ]),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(engagements).values({ id: ENG_B1, tenantId: TENANT_B, clientDisplayName: "Client B", name: "Project B" }),
+  );
 });
 
 describe("NFR-2 isolation — Postgres RLS backstop", () => {
@@ -125,6 +153,50 @@ describe("NFR-2 isolation — Postgres RLS backstop", () => {
     expect(rows).toHaveLength(0);
   });
 
-  // TODO (Story 2.1): add the engagement-scoped Client fixture (app.engagement_id +
-  // an engagements table) once `engagements` exists.
+});
+
+describe("NFR-2 isolation — engagement-scoped (the Client case, before any Client UI)", () => {
+  it("(h) a Freelancer (tenant scope, no engagement) sees ALL their Tenant's Engagements", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(engagements));
+    expect(rows.map((r) => r.id).sort()).toEqual([ENG_A1, ENG_A2].sort());
+  });
+
+  it("(i) a Client (engagement-scoped to E1) sees ONLY E1 — never E2 of the SAME Tenant", async () => {
+    const rows = await asClient(TENANT_A, ENG_A1, (tx) => tx.select().from(engagements));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(ENG_A1);
+  });
+
+  it("(j) the Client cannot reach a sibling Engagement even by explicit id", async () => {
+    const rows = await asClient(TENANT_A, ENG_A1, (tx) =>
+      tx.select().from(engagements).where(eq(engagements.id, ENG_A2)),
+    );
+    expect(rows).toHaveLength(0);
+  });
+
+  it("(k) cross-tenant: Tenant B sees only its own Engagement", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(engagements));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].id).toBe(ENG_B1);
+  });
+
+  it("(k2) WITH CHECK blocks INSERTing an Engagement stamped for ANOTHER Tenant", async () => {
+    // The real policy test (vs. the repo merely stamping ctx.tenantId): scoped to A,
+    // try to forge a row into B → the engagement_scope WITH CHECK rejects it.
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx
+          .insert(engagements)
+          .values({ tenantId: TENANT_B, clientDisplayName: "Forged", name: "Forged" }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(l) engagements fail closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(engagements);
+    });
+    expect(rows).toHaveLength(0);
+  });
 });

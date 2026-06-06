@@ -18,6 +18,15 @@ export * from "./auth-schema";
  */
 const currentTenant = sql`nullif(current_setting('app.tenant_id', true), '')::uuid`;
 
+/**
+ * Engagement scope GUC (Story 2.1). A Freelancer request sets ONLY `app.tenant_id`, so
+ * this is NULL → the engagement clause is satisfied and they see all their Tenant's
+ * Engagements. A Client request also sets `app.engagement_id` → restricted to that one
+ * Engagement (a Client can never see another Engagement within the same Tenant). Same
+ * NULLIF-then-cast fail-closed shape as `currentTenant`.
+ */
+const currentEngagement = sql`nullif(current_setting('app.engagement_id', true), '')::uuid`;
+
 export const tenants = pgTable(
   "tenants",
   {
@@ -71,5 +80,39 @@ export const branding = pgTable(
   ],
 );
 
+/**
+ * A client project — the core aggregate (Story 2.1). Tenant-owned, and (for Clients)
+ * engagement-scoped via RLS. Its Ship Feed is its ShipUpdates (1:1 by construction).
+ */
+export const engagements = pgTable(
+  "engagements",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    clientDisplayName: text("client_display_name").notNull(),
+    name: text("name").notNull(),
+    scope: text("scope"),
+    // active | paused | completed | archived (archived = hidden from the active list).
+    status: text("status").notNull().default("active"),
+    lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    // Tenant-scoped for the Freelancer; additionally Engagement-scoped for a Client.
+    pgPolicy("engagement_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR id = ${currentEngagement})`,
+    }),
+  ],
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
+export type Engagement = typeof engagements.$inferSelect;
