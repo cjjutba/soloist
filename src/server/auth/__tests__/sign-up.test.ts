@@ -48,7 +48,12 @@ describe("signUpFreelancer", () => {
     expect(res).toEqual({ ok: true });
     expect(m.signUpEmail).toHaveBeenCalledWith(
       expect.objectContaining({
-        body: { name: "Casey Dev", email: "casey@example.com", password: "supersecret" },
+        body: {
+          name: "Casey Dev",
+          email: "casey@example.com",
+          password: "supersecret",
+          callbackURL: "/app",
+        },
       }),
     );
     expect(m.provisionTenant).toHaveBeenCalledWith({

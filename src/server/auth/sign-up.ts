@@ -79,7 +79,9 @@ export async function signUpFreelancer(
   let userId: string;
   try {
     const res = await auth.api.signUpEmail({
-      body: { name, email, password },
+      // callbackURL is where the email-verification link lands after confirming +
+      // auto-sign-in — send the freelancer straight to their Cockpit, not the landing.
+      body: { name, email, password, callbackURL: "/app" },
       headers: await headers(),
     });
     userId = res.user.id;

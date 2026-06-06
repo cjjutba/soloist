@@ -37,3 +37,4 @@ _bmad/custom/config.user.toml
 # --- Vercel / test coverage ---
 .vercel
 /coverage
+.env*

@@ -1,8 +1,13 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getAppSession } from "@/server/auth/session";
 
-// Public landing at `/`. (A fuller marketing page comes later; for now it brands
-// the product and routes into sign-up.)
-export default function LandingPage() {
+// Public landing at `/`. A signed-in Freelancer is sent straight to their Cockpit
+// (so the post-verification landing + a returning login both land in /app).
+export default async function LandingPage() {
+  const session = await getAppSession();
+  if (session?.role === "freelancer") redirect("/app");
+
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-background p-8 text-foreground">
       <p className="font-mono text-xs uppercase tracking-[0.2em] text-muted-foreground">
