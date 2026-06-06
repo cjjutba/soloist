@@ -67,6 +67,7 @@ development_status:
   epic-3: in-progress
   3-1-moat-spike-github-app-webhook-one-candidate: done
   3-2-connect-disconnect-github-repositories: done
+  3-2-1-per-tenant-github-installation-binding: done
   3-3-auto-pull-commits-prs-releases-candidates: backlog
   3-4-founder-readable-rendering-heuristic: backlog
   3-5-curate-candidates-edit-status-dismiss: backlog

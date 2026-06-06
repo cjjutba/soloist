@@ -113,3 +113,15 @@ export function normalizeGithubEvent(
 
   return null;
 }
+
+/**
+ * Story 3.2.1: extract the installation id from an `installation.deleted` (uninstall) event, else
+ * null. The pipeline uses it to remove the Tenant binding + disconnect that installation's repos.
+ */
+export function parseInstallationDeleted(eventType: string, payload: unknown): string | null {
+  if (eventType !== "installation") return null;
+  const p = obj(payload);
+  if (str(p.action) !== "deleted") return null;
+  const id = obj(p.installation).id;
+  return typeof id === "number" || typeof id === "string" ? String(id) : null;
+}

@@ -1,13 +1,18 @@
+import {
+  disconnectByInstallation,
+  removeInstallation,
+} from "@/server/db/repositories/github-installations.repository";
 import { createCandidate } from "@/server/db/repositories/ship-update.repository";
 import { markProcessed } from "@/server/db/repositories/webhook-event.repository";
-import { normalizeGithubEvent } from "@/server/ship-feed/github-event";
+import { normalizeGithubEvent, parseInstallationDeleted } from "@/server/ship-feed/github-event";
 import { resolveEngagementForRepo } from "@/server/ship-feed/resolve-engagement";
 import { heuristicSummarizer } from "@/server/ship-feed/summarization";
 import { inngest, type GithubEventReceived } from "../client";
 
 export type HandleResult =
   | { status: "candidate"; candidateId: string | null }
-  | { status: "skipped"; reason: "non-qualifying" | "no-engagement" };
+  | { status: "skipped"; reason: "non-qualifying" | "no-engagement" }
+  | { status: "uninstalled"; installationId: string };
 
 /**
  * The core of the GitHub → candidate pipeline (Story 3.1), extracted so it's unit-testable
@@ -16,6 +21,17 @@ export type HandleResult =
  * delivery processed.
  */
 export async function handleGithubEvent(data: GithubEventReceived): Promise<HandleResult> {
+  // Uninstall cleanup (Story 3.2.1): drop the Tenant binding + disconnect that installation's repos.
+  const uninstalled = parseInstallationDeleted(data.eventType, data.payload);
+  if (uninstalled) {
+    // Disconnect FIRST (stops the resolve routing) then remove the binding, so a mid-failure
+    // retry never leaves repos still routing for a removed installation.
+    await disconnectByInstallation(uninstalled);
+    await removeInstallation(uninstalled);
+    await markProcessed(data.ghDeliveryId);
+    return { status: "uninstalled", installationId: uninstalled };
+  }
+
   const normalized = normalizeGithubEvent(data.eventType, data.payload);
   if (!normalized) {
     await markProcessed(data.ghDeliveryId);

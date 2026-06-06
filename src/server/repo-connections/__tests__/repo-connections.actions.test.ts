@@ -8,16 +8,20 @@ const m = vi.hoisted(() => ({
   getEngagement: vi.fn(),
   connectRepo: vi.fn(),
   disconnectRepo: vi.fn(),
-  listConnectableRepos: vi.fn(),
+  listInstallationIds: vi.fn(),
+  listReposForInstallations: vi.fn(),
 }));
 
 vi.mock("@/server/auth/session", () => ({ requireFreelancer: () => Promise.resolve(m.ctx) }));
 vi.mock("@/server/db/repositories/engagements.repository", () => ({ getEngagement: m.getEngagement }));
+vi.mock("@/server/db/repositories/github-installations.repository", () => ({
+  listInstallationIds: m.listInstallationIds,
+}));
 vi.mock("@/server/db/repositories/repo-connections.repository", () => ({
   connectRepo: m.connectRepo,
   disconnectRepo: m.disconnectRepo,
 }));
-vi.mock("@/server/github/app", () => ({ listConnectableRepos: m.listConnectableRepos }));
+vi.mock("@/server/github/app", () => ({ listReposForInstallations: m.listReposForInstallations }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
 import { connectRepoAction, disconnectRepoAction } from "../repo-connections.actions";
@@ -28,7 +32,8 @@ beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   m.getEngagement.mockResolvedValue({ id: ENG });
-  m.listConnectableRepos.mockResolvedValue([REPO]);
+  m.listInstallationIds.mockResolvedValue(["555"]);
+  m.listReposForInstallations.mockResolvedValue([REPO]);
   m.connectRepo.mockResolvedValue({ id: CONN });
   m.disconnectRepo.mockResolvedValue({ id: CONN, status: "disconnected" });
 });
@@ -46,7 +51,7 @@ describe("Story 3.2 — connect/disconnect actions", () => {
   });
 
   it("a repo not available to the App → error, no insert", async () => {
-    m.listConnectableRepos.mockResolvedValue([REPO]);
+    m.listReposForInstallations.mockResolvedValue([REPO]);
     const res = await connectRepoAction({ engagementId: ENG, repoFullName: "someone/else" });
     expect(res.ok).toBe(false);
     expect(m.connectRepo).not.toHaveBeenCalled();
@@ -62,7 +67,7 @@ describe("Story 3.2 — connect/disconnect actions", () => {
     m.getEngagement.mockResolvedValue(null);
     const res = await connectRepoAction({ engagementId: ENG, repoFullName: "cjjutba/soloist" });
     expect(res.ok).toBe(false);
-    expect(m.listConnectableRepos).not.toHaveBeenCalled();
+    expect(m.listReposForInstallations).not.toHaveBeenCalled();
   });
 
   it("invalid input (non-uuid engagement) → validation error, no work", async () => {

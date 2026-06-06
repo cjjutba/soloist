@@ -48,6 +48,9 @@ const schema = z.object({
   GITHUB_APP_WEBHOOK_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   GITHUB_APP_PRIVATE_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   GITHUB_APP_CLIENT_ID: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  // OAuth-during-install (Story 3.2.1): verifies the installer actually controls the installation
+  // before binding it to their Tenant (prevents installation_id spoofing).
+  GITHUB_APP_CLIENT_SECRET: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   GITHUB_APP_SLUG: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
 
   // Inngest (Epic 3 — durable event pipeline). Optional for the build, but REQUIRED in prod:

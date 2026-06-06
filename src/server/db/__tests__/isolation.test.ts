@@ -8,6 +8,7 @@ import {
   branding,
   clientAccess,
   engagements,
+  githubInstallations,
   invitations,
   repoConnections,
   shipUpdates,
@@ -19,7 +20,7 @@ import { applyTenantScope } from "../scope";
 // In-process Postgres (PGlite) — real RLS semantics, offline, no Neon/docker needed.
 const client = new PGlite();
 const db = drizzle(client, {
-  schema: { tenants, branding, user, engagements, invitations, clientAccess, shipUpdates, repoConnections },
+  schema: { tenants, branding, user, engagements, invitations, clientAccess, shipUpdates, repoConnections, githubInstallations },
 });
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
@@ -161,6 +162,13 @@ beforeAll(async () => {
       ghRepoId: "repo_b",
       repoFullName: "beta/repo-b",
     }),
+  );
+  // Seed one GitHub installation binding per Tenant (Story 3.2.1), scoped so WITH CHECK is exercised.
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(githubInstallations).values({ tenantId: TENANT_A, ghInstallationId: "inst-a-1", accountLogin: "alpha-acct" }),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(githubInstallations).values({ tenantId: TENANT_B, ghInstallationId: "inst-b-1", accountLogin: "beta-acct" }),
   );
 });
 
@@ -429,6 +437,36 @@ describe("NFR-2 isolation — repo_connections (Story 3.2)", () => {
     const rows = await db.transaction(async (tx) => {
       await tx.execute(sql`set local role soloist_app`);
       return tx.select().from(repoConnections);
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("NFR-2 isolation — github_installations (Story 3.2.1, tenant-scoped)", () => {
+  it("(ac) a Freelancer sees only their own Tenant's installations", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(githubInstallations));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ghInstallationId).toBe("inst-a-1");
+  });
+
+  it("(ad) cross-tenant: Tenant B sees only its own installation", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(githubInstallations));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].ghInstallationId).toBe("inst-b-1");
+  });
+
+  it("(ae) WITH CHECK blocks an installation forged for ANOTHER Tenant", async () => {
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(githubInstallations).values({ tenantId: TENANT_B, ghInstallationId: "inst-forged" }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(af) github_installations fail closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(githubInstallations);
     });
     expect(rows).toHaveLength(0);
   });

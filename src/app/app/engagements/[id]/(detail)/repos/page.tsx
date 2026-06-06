@@ -1,18 +1,21 @@
 import { notFound } from "next/navigation";
 import { requireFreelancer } from "@/server/auth/session";
+import { listInstallationIds } from "@/server/db/repositories/github-installations.repository";
 import {
   listActiveRepoFullNames,
   listConnections,
 } from "@/server/db/repositories/repo-connections.repository";
-import { isGithubConfigured, listConnectableRepos, type ConnectableRepo } from "@/server/github/app";
+import { isGithubConfigured, listReposForInstallations, type ConnectableRepo } from "@/server/github/app";
+import { githubInstallUrl } from "@/server/github/install-url";
 import { isUuid } from "@/lib/uuid";
+import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConnectRepoForm } from "./connect-repo-form";
 import { RepoConnectionCard } from "./repo-connection-card";
 
-/** Repo Connections tab (Story 3.2). The `(detail)` layout already guarded the Engagement
- * (requireFreelancer + getEngagement → notFound); the `isUuid` guard here is defensive (the
- * page and layout render concurrently — a non-uuid id must not reach a uuid column). */
+/** Repo Connections tab (Stories 3.2 / 3.2.1). Lists/connects only repos from THIS Tenant's own
+ * GitHub installation(s) — never another Tenant's. The `(detail)` layout already guarded the
+ * Engagement; `isUuid` here is defensive (page + layout render concurrently). */
 export default async function ReposTab({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!isUuid(id)) notFound();
@@ -20,11 +23,14 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
   const connections = await listConnections(ctx, id);
 
   const configured = isGithubConfigured();
+  const installationIds = configured ? await listInstallationIds(ctx) : [];
+  const hasInstallation = installationIds.length > 0;
+
   let available: ConnectableRepo[] = [];
   let githubError = false;
-  if (configured) {
+  if (configured && hasInstallation) {
     try {
-      available = await listConnectableRepos();
+      available = await listReposForInstallations(installationIds);
     } catch {
       githubError = true; // GitHub unreachable → degraded banner, never a 500
     }
@@ -32,14 +38,11 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
 
   const active = connections.filter((c) => c.status !== "disconnected");
   const activeHere = new Set(active.map((c) => c.repoFullName));
-
-  // The picker excludes every repo the Tenant has ACTIVELY connected ANYWHERE (not just this
-  // Engagement), so it never offers a repo that would 23505 on connect.
-  const tenantActive =
-    configured && !githubError ? new Set(await listActiveRepoFullNames(ctx)) : new Set<string>();
+  const showPicker = configured && hasInstallation && !githubError;
+  // Only needed for the picker — skip the query in the not-configured / no-installation / degraded states.
+  const tenantActive = showPicker ? new Set(await listActiveRepoFullNames(ctx)) : new Set<string>();
   const pickable = available.filter((r) => !tenantActive.has(r.fullName));
 
-  // "Previously connected": disconnected repos not currently active, one card per repo name.
   const seen = new Set<string>();
   const disconnected = connections.filter((c) => {
     if (c.status !== "disconnected" || activeHere.has(c.repoFullName) || seen.has(c.repoFullName)) {
@@ -48,6 +51,8 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
     seen.add(c.repoFullName);
     return true;
   });
+
+  const installUrl = githubInstallUrl();
 
   return (
     <div className="flex flex-col gap-6">
@@ -58,6 +63,23 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
             Finish the GitHub App setup (the app id + private key) to connect repositories and
             auto-pull activity. Until then you can write updates by hand.
           </p>
+        </Card>
+      ) : !hasInstallation ? (
+        <Card className="flex flex-col items-center gap-3 p-12 text-center">
+          <p className="font-medium">Install the GitHub App</p>
+          <p className="max-w-md text-sm text-muted-foreground">
+            Connect your GitHub account so Soloist can list your repositories and auto-pull
+            activity. You choose exactly which repos — only yours are ever shown.
+          </p>
+          {installUrl ? (
+            <a href={installUrl} className={buttonVariants({})}>
+              Install on GitHub
+            </a>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              (Set <code>GITHUB_APP_SLUG</code> to enable the install link.)
+            </p>
+          )}
         </Card>
       ) : githubError ? (
         <Card className="flex flex-col items-center gap-2 border-destructive/40 p-8 text-center">
@@ -76,7 +98,7 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
         </div>
       ) : null}
 
-      {configured && !githubError ? (
+      {showPicker ? (
         <ConnectRepoForm engagementId={id} repos={pickable} hasConnections={active.length > 0} />
       ) : null}
 

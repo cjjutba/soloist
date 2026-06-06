@@ -288,6 +288,37 @@ export const repoConnections = pgTable(
 );
 
 /**
+ * Binds a GitHub App installation to the Tenant that installed it (Story 3.2.1). The shared
+ * Soloist App can be installed by many accounts; this map is what makes that multi-tenant-safe —
+ * the connect picker lists only repos from the caller Tenant's installation(s). The binding is
+ * created from the AUTHENTICATED Setup-URL redirect (the webhook can't know which Tenant).
+ */
+export const githubInstallations = pgTable(
+  "github_installations",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    // A GitHub installation is globally unique → one binding per installation (re-install
+    // re-asserts ownership to the current caller via onConflictDoUpdate).
+    ghInstallationId: text("gh_installation_id").notNull().unique(),
+    accountLogin: text("account_login"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  () => [
+    // Tenant-owned (no engagement dimension) — single-clause scope like `branding`.
+    pgPolicy("github_installation_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant}`,
+      withCheck: sql`tenant_id = ${currentTenant}`,
+    }),
+  ],
+);
+
+/**
  * GitHub webhook idempotency ledger (Story 3.1). Written by the PRE-TENANT webhook handler
  * (it dedupes on `gh_delivery_id` before any Tenant context exists), so — like the Better
  * Auth identity tables — it carries **NO RLS** and is queried as the connection role. It
@@ -311,3 +342,4 @@ export type ClientAccess = typeof clientAccess.$inferSelect;
 export type ShipUpdate = typeof shipUpdates.$inferSelect;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type RepoConnection = typeof repoConnections.$inferSelect;
+export type GithubInstallation = typeof githubInstallations.$inferSelect;

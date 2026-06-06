@@ -4,10 +4,16 @@ const m = vi.hoisted(() => ({
   createCandidate: vi.fn(),
   markProcessed: vi.fn(),
   resolveEngagementForRepo: vi.fn(),
+  removeInstallation: vi.fn(),
+  disconnectByInstallation: vi.fn(),
 }));
 
 vi.mock("@/server/db/repositories/ship-update.repository", () => ({ createCandidate: m.createCandidate }));
 vi.mock("@/server/db/repositories/webhook-event.repository", () => ({ markProcessed: m.markProcessed }));
+vi.mock("@/server/db/repositories/github-installations.repository", () => ({
+  removeInstallation: m.removeInstallation,
+  disconnectByInstallation: m.disconnectByInstallation,
+}));
 vi.mock("@/server/ship-feed/resolve-engagement", () => ({ resolveEngagementForRepo: m.resolveEngagementForRepo }));
 // The Inngest client is imported for the createFunction wrapper — give it a no-op shape.
 vi.mock("../../client", () => ({ inngest: { createFunction: () => ({}) } }));
@@ -30,6 +36,8 @@ beforeEach(() => {
   m.markProcessed.mockResolvedValue(undefined);
   m.createCandidate.mockResolvedValue({ id: "su1" });
   m.resolveEngagementForRepo.mockResolvedValue({ tenantId: "t1", engagementId: "e1" });
+  m.removeInstallation.mockResolvedValue(1);
+  m.disconnectByInstallation.mockResolvedValue(0);
 });
 
 describe("handleGithubEvent (Story 3.1)", () => {
@@ -71,5 +79,28 @@ describe("handleGithubEvent (Story 3.1)", () => {
     m.createCandidate.mockResolvedValue(null);
     const r = await handleGithubEvent(mergedPr);
     expect(r).toEqual({ status: "candidate", candidateId: null });
+  });
+
+  it("an installation.deleted (uninstall) → removes the binding + disconnects its repos (3.2.1)", async () => {
+    const r = await handleGithubEvent({
+      ghDeliveryId: "d9",
+      eventType: "installation",
+      payload: { action: "deleted", installation: { id: 555 } },
+    });
+    expect(r).toEqual({ status: "uninstalled", installationId: "555" });
+    expect(m.removeInstallation).toHaveBeenCalledWith("555");
+    expect(m.disconnectByInstallation).toHaveBeenCalledWith("555");
+    expect(m.createCandidate).not.toHaveBeenCalled();
+    expect(m.markProcessed).toHaveBeenCalledWith("d9");
+  });
+
+  it("a non-deleted installation event → no cleanup, non-qualifying", async () => {
+    const r = await handleGithubEvent({
+      ghDeliveryId: "d10",
+      eventType: "installation",
+      payload: { action: "created", installation: { id: 555 } },
+    });
+    expect(r).toEqual({ status: "skipped", reason: "non-qualifying" });
+    expect(m.removeInstallation).not.toHaveBeenCalled();
   });
 });
