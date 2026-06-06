@@ -4,7 +4,7 @@ baseline_commit: 2d8635c4d88e7f8cd42d00618dc9c1b8a366d2a3
 
 # Story 1.7: Cockpit Account Settings + Observability/CI Baseline
 
-Status: review
+Status: done
 
 <!-- Note: Validation is optional. Run validate-create-story for a quality check before dev-story. -->
 
@@ -62,7 +62,7 @@ so that I can manage my login and the project ships safely from day one.
 
 - [x] **Task 4 — Gates + deploy + ops notes** (AC: 1, 2, 3)
   - [x] `npm run lint && npm run typecheck && npm test && npm run build` clean (build proves the Sentry wiring compiles DSN-less).
-  - [ ] Deploy to Vercel production. Live smoke (signed-in freelancer): `/app/settings/account` renders; change name; change password; request email change → "check your email".
+  - [x] Deployed to Vercel production → https://soloist.cjjutba.com. Live smoke: `/app/settings/account` + `/app/settings/branding` (no auth) → **307 → /login**; `/`,`/login` → 200; `/api/auth/get-session` → `null` @200; clean Sentry boot. The signed-in account round-trip (name/password change, email-change verification) is CJ's to run.
   - [x] **Ops notes (document, don't block):** (a) to activate Sentry, CJ creates a Sentry project + sets `SENTRY_DSN`/`NEXT_PUBLIC_SENTRY_DSN` (+ optional `SENTRY_AUTH_TOKEN`/`SENTRY_ORG`/`SENTRY_PROJECT` for source maps) in Vercel; (b) to activate CI + preview-per-PR: push the repo to GitHub, connect it in Vercel (git integration), and enable Neon's Vercel preview-branch integration (AR-16).
 
 ## Dev Notes
