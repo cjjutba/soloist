@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cva, type VariantProps } from "class-variance-authority";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
@@ -23,11 +24,24 @@ const buttonVariants = cva(
 
 export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {}
+    VariantProps<typeof buttonVariants> {
+  /** Show a spinner + disable while an async action runs (seamless feedback — Story: button
+   * loading states). The button is also disabled so it can't be double-submitted. */
+  loading?: boolean;
+}
 
 export const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, ...props }, ref) => (
-    <button ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />
+  ({ className, variant, size, loading = false, disabled, children, ...props }, ref) => (
+    <button
+      ref={ref}
+      disabled={disabled || loading}
+      aria-busy={loading || undefined}
+      className={cn(buttonVariants({ variant, size, className }))}
+      {...props}
+    >
+      {loading ? <Loader2 className="size-4 animate-spin" aria-hidden /> : null}
+      {children}
+    </button>
   ),
 );
 Button.displayName = "Button";

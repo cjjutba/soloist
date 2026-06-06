@@ -42,8 +42,8 @@ export function ArchiveButton({
   }
 
   return (
-    <Button variant="outline" size="sm" onClick={onArchive} disabled={busy}>
-      {busy ? "Archiving…" : "Archive"}
+    <Button variant="outline" size="sm" onClick={onArchive} loading={busy}>
+      Archive
     </Button>
   );
 }

@@ -128,8 +128,8 @@ export function BrandingForm({
                 className="font-mono"
                 aria-invalid={!!error}
               />
-              <Button onClick={onSaveAccent} disabled={savingAccent}>
-                {savingAccent ? "Saving…" : "Save"}
+              <Button onClick={onSaveAccent} loading={savingAccent}>
+                Save
               </Button>
             </div>
             {error ? (
@@ -176,8 +176,8 @@ export function BrandingForm({
               accept="image/png,image/jpeg"
               className="text-sm text-muted-foreground file:mr-3 file:rounded-[var(--radius-md)] file:border file:border-input file:bg-card file:px-3 file:py-1.5 file:text-sm file:font-medium"
             />
-            <Button variant="outline" onClick={onUploadLogo} disabled={uploading} className="self-start">
-              {uploading ? "Uploading…" : "Upload logo"}
+            <Button variant="outline" onClick={onUploadLogo} loading={uploading} className="self-start">
+              Upload logo
             </Button>
           </CardContent>
         </Card>

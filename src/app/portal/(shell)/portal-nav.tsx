@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, LogOut } from "lucide-react";
+import { Bell, Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/server/auth/client";
@@ -130,7 +130,11 @@ export function PortalNav({ clientName, clientEmail }: { clientName: string; cli
                   FOCUS_RING,
                 )}
               >
-                <LogOut className="size-4" aria-hidden />
+                {signingOut ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden />
+                ) : (
+                  <LogOut className="size-4" aria-hidden />
+                )}
                 {signingOut ? "Signing out…" : "Log out"}
               </button>
             </div>

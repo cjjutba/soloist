@@ -136,8 +136,8 @@ export function SignUpForm() {
               {...register("slug")}
             />
           </Field>
-          <Button type="submit" disabled={isSubmitting} className="mt-2">
-            {isSubmitting ? "Creating…" : "Create workspace"}
+          <Button type="submit" loading={isSubmitting} className="mt-2">
+            Create workspace
           </Button>
         </form>
       </CardContent>

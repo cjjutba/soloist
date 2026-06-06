@@ -70,10 +70,10 @@ export function AcceptForm({ token }: { token: string }) {
       ) : null}
       <Button
         type="submit"
-        disabled={isSubmitting}
+        loading={isSubmitting}
         className="bg-[var(--tenant-accent)] text-[var(--tenant-accent-foreground)] hover:opacity-90"
       >
-        {isSubmitting ? "Setting up…" : "Enter portal"}
+        Enter portal
       </Button>
     </form>
   );

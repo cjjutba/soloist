@@ -134,8 +134,8 @@ export function EngagementForm(props: Props) {
           ) : null}
 
           <div className="mt-2 flex items-center gap-3">
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving…" : isEdit ? "Save changes" : "Create engagement"}
+            <Button type="submit" loading={isSubmitting}>
+              {isEdit ? "Save changes" : "Create engagement"}
             </Button>
             <Link href="/app" className={buttonVariants({ variant: "ghost" })}>
               Cancel

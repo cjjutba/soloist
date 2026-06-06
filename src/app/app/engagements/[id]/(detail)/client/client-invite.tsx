@@ -91,8 +91,8 @@ export function ClientInvite({ engagementId, view }: { engagementId: string; vie
                 aria-invalid={!!error}
               />
             </Field>
-            <Button type="submit" disabled={busy} className="self-start">
-              {busy ? "Sending…" : "Send invite"}
+            <Button type="submit" loading={busy} className="self-start">
+              Send invite
             </Button>
           </form>
         ) : (
@@ -119,8 +119,8 @@ export function ClientInvite({ engagementId, view }: { engagementId: string; vie
               </p>
             ) : null}
             {view.kind !== "accepted" ? (
-              <Button variant="outline" onClick={onResend} disabled={busy} className="self-start">
-                {busy ? "Resending…" : "Resend invite"}
+              <Button variant="outline" onClick={onResend} loading={busy} className="self-start">
+                Resend invite
               </Button>
             ) : null}
           </div>

@@ -77,8 +77,8 @@ function NameForm({ initialName }: { initialName: string }) {
           <Field label="Display name" htmlFor="name" error={errors.name?.message}>
             <Input id="name" autoComplete="name" aria-invalid={!!errors.name} {...register("name")} />
           </Field>
-          <Button type="submit" disabled={isSubmitting} className="self-start">
-            {isSubmitting ? "Saving…" : "Save name"}
+          <Button type="submit" loading={isSubmitting} className="self-start">
+            Save name
           </Button>
         </form>
       </CardContent>
@@ -157,8 +157,8 @@ function EmailForm({ currentEmail }: { currentEmail: string }) {
                 {...register("newEmail")}
               />
             </Field>
-            <Button type="submit" disabled={isSubmitting} className="self-start">
-              {isSubmitting ? "Sending…" : "Change email"}
+            <Button type="submit" loading={isSubmitting} className="self-start">
+              Change email
             </Button>
           </form>
         )}
@@ -235,8 +235,8 @@ function PasswordForm() {
               {...register("newPassword")}
             />
           </Field>
-          <Button type="submit" disabled={isSubmitting} className="self-start">
-            {isSubmitting ? "Changing…" : "Change password"}
+          <Button type="submit" loading={isSubmitting} className="self-start">
+            Change password
           </Button>
         </form>
       </CardContent>

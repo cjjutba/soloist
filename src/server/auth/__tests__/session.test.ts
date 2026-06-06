@@ -104,6 +104,14 @@ describe("requireFreelancer (/app guard)", () => {
     expect(notFound).toHaveBeenCalled();
   });
 
+  it("redirects a CLIENT session to /portal (seamless RBAC, not a 404)", async () => {
+    m.getSession.mockResolvedValue(noTenant);
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt: new Date() });
+    await expect(requireFreelancer()).rejects.toThrow("REDIRECT:/portal");
+    expect(redirect).toHaveBeenCalledWith("/portal");
+    expect(notFound).not.toHaveBeenCalled();
+  });
+
   it("not-founds an unverified freelancer session (defense-in-depth)", async () => {
     m.getSession.mockResolvedValue({
       user: { id: "u3", email: "c@example.com", emailVerified: false, tenantId: "t3" },
@@ -129,10 +137,11 @@ describe("requireClient (/portal guard — cross-surface rejection)", () => {
     });
   });
 
-  it("not-founds a freelancer session presented to the portal", async () => {
+  it("redirects a freelancer session to /app (seamless RBAC, not a 404)", async () => {
     m.getSession.mockResolvedValue(freelancer);
-    await expect(requireClient()).rejects.toThrow("NOT_FOUND");
-    expect(notFound).toHaveBeenCalled();
+    await expect(requireClient()).rejects.toThrow("REDIRECT:/app");
+    expect(redirect).toHaveBeenCalledWith("/app");
+    expect(notFound).not.toHaveBeenCalled();
   });
 
   it("redirects to /login when unauthenticated", async () => {
@@ -159,9 +168,10 @@ describe("requireOnboardedClient (/portal surfaces — onboarding gate)", () => 
     expect(redirect).toHaveBeenCalledWith("/portal/onboarding");
   });
 
-  it("not-founds a freelancer presented to a portal surface", async () => {
+  it("redirects a freelancer presented to a portal surface to /app", async () => {
     m.getSession.mockResolvedValue(freelancer);
-    await expect(requireOnboardedClient()).rejects.toThrow("NOT_FOUND");
-    expect(notFound).toHaveBeenCalled();
+    await expect(requireOnboardedClient()).rejects.toThrow("REDIRECT:/app");
+    expect(redirect).toHaveBeenCalledWith("/app");
+    expect(notFound).not.toHaveBeenCalled();
   });
 });

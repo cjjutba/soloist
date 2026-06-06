@@ -53,7 +53,9 @@ export function LoginForm() {
       }
       return;
     }
-    router.push("/app");
+    // Route to "/" — the role router sends a Freelancer to /app and a Client to /portal,
+    // so ONE login serves both. (The role is derived server-side, not on the client.)
+    router.push("/");
     router.refresh();
   }
 
@@ -61,7 +63,9 @@ export function LoginForm() {
     <Card className="w-full max-w-md">
       <CardHeader>
         <CardTitle>Log in</CardTitle>
-        <CardDescription>Welcome back to your workspace.</CardDescription>
+        <CardDescription>
+          Welcome back. Freelancers reach their Cockpit, clients their portal.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
@@ -83,8 +87,8 @@ export function LoginForm() {
               {...register("password")}
             />
           </Field>
-          <Button type="submit" disabled={isSubmitting} className="mt-2">
-            {isSubmitting ? "Signing in…" : "Log in"}
+          <Button type="submit" loading={isSubmitting} className="mt-2">
+            Log in
           </Button>
         </form>
       </CardContent>

@@ -32,8 +32,8 @@ export function OnboardingCta() {
   }
 
   return (
-    <Button onClick={onClick} disabled={busy} size="lg" className="min-h-11">
-      {busy ? "Just a sec…" : "Got it — show me"}
+    <Button onClick={onClick} loading={busy} size="lg" className="min-h-11">
+      Got it — show me
     </Button>
   );
 }

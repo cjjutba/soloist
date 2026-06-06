@@ -91,6 +91,9 @@ export async function getAppSession(): Promise<AppSession | null> {
 export async function requireFreelancer(): Promise<FreelancerSession> {
   const session = await getAppSession();
   if (!session) redirect("/login");
+  // A signed-in Client who lands on a Cockpit route is sent to THEIR surface, not a
+  // dead-end 404 — seamless RBAC. They only ever see the portal, so no Cockpit disclosure.
+  if (session.role === "client") redirect("/portal");
   if (session.role !== "freelancer" || !session.tenantId || !session.emailVerified) {
     notFound();
   }
@@ -107,6 +110,9 @@ export async function requireFreelancer(): Promise<FreelancerSession> {
 export async function requireClient(): Promise<ClientSession> {
   const session = await getAppSession();
   if (!session) redirect("/login");
+  // A signed-in Freelancer who lands on a Portal route is sent to THEIR surface — seamless
+  // RBAC, no dead-end 404 (and no Portal disclosure: they only ever see the Cockpit).
+  if (session.role === "freelancer") redirect("/app");
   if (session.role !== "client" || !session.tenantId || !session.engagementId) {
     notFound();
   }

@@ -30,8 +30,8 @@ export function LogoutButton() {
   }
 
   return (
-    <Button variant="outline" size="sm" disabled={loading} onClick={onLogout}>
-      {loading ? "Signing out…" : "Log out"}
+    <Button variant="outline" size="sm" loading={loading} onClick={onLogout}>
+      Log out
     </Button>
   );
 }
