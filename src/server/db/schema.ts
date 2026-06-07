@@ -224,9 +224,12 @@ export const shipUpdates = pgTable(
     // manual updates (Postgres treats NULLs as distinct → no false conflicts).
     sourceEventKey: text("source_event_key"),
     publishedAt: timestamp("published_at", { withTimezone: true }),
-    // Raw payload detail (SHAs, diffs, full refs) — kept off the founder-facing title/summary,
-    // never client-queried directly. (A candidate's title/summary may name a branch; client
-    // exposure is gated at publish — the Client feed reads only published rows, 3.7.) arch L185.
+    // Story 3.4 kill-signal: stamped by the Story 3.5 curation edit (was this candidate edited
+    // before publish?) — the input to the rendering-quality stat. NULL = rendered as-is.
+    editedAt: timestamp("edited_at", { withTimezone: true }),
+    // Raw payload detail (SHAs, diffs, full refs, branch names) — kept off the founder-facing
+    // title/summary (NFR-3, Story 3.4), never client-queried directly. The Client feed reads only
+    // published rows' {status_tag,title,summary,published_at} (3.7). architecture L185.
     rawMeta: jsonb("raw_meta"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },

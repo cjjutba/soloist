@@ -14,7 +14,11 @@ vi.mock("../index", () => ({
   },
 }));
 
-import { createCandidate, findCandidateBySourceEventKey } from "../repositories/ship-update.repository";
+import {
+  createCandidate,
+  findCandidateBySourceEventKey,
+  renderingQualityStat,
+} from "../repositories/ship-update.repository";
 import { markProcessed, recordDelivery } from "../repositories/webhook-event.repository";
 import { createEngagement } from "../repositories/engagements.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
@@ -96,5 +100,21 @@ describe("Story 3.1 — ship-update repository (scoped, idempotent)", () => {
 
   it("NFR-2: cross-tenant cannot read another Tenant's candidate (RLS)", async () => {
     expect(await findCandidateBySourceEventKey(ctxB(), ENG_A, "pr:cj/x:1:merged")).toBeNull();
+  });
+
+  it("Story 3.4 renderingQualityStat: % of PUBLISHED candidates edited before publish (RLS-scoped)", async () => {
+    // Seed published rows directly (publish/edit are Stories 3.6/3.5; candidates don't count).
+    const base = { tenantId: TENANT_A, engagementId: ENG_A, statusTag: "shipped", source: "github", state: "published" } as const;
+    await h.db!.insert(schema.shipUpdates).values([
+      { ...base, title: "edited 1", editedAt: new Date("2026-01-01T00:00:00Z") },
+      { ...base, title: "as-is" },
+      { ...base, title: "edited 2", editedAt: new Date("2026-01-02T00:00:00Z") },
+    ]);
+    const stat = await renderingQualityStat(ctxA());
+    expect(stat.published).toBe(3);
+    expect(stat.edited).toBe(2);
+    expect(stat.editedRate).toBeCloseTo(2 / 3);
+    // Cross-tenant: B sees none of A's published rows.
+    expect((await renderingQualityStat(ctxB())).published).toBe(0);
   });
 });

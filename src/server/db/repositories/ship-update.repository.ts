@@ -38,6 +38,24 @@ export async function createCandidate(
   });
 }
 
+/** Kill-signal (Story 3.4 / AR-13): of the Tenant's PUBLISHED ship updates, what fraction were
+ * EDITED before publish (`edited_at` set, stamped by the Story 3.5 curation edit)? A proxy for
+ * heuristic rendering quality — a high edit rate means the auto-rendering needs work (or an LLM
+ * summarizer behind the same `SummarizationProvider` seam). RLS-scoped. */
+export async function renderingQualityStat(
+  ctx: TenantContext,
+): Promise<{ published: number; edited: number; editedRate: number }> {
+  const rows = await withTenant(ctx, (tx) =>
+    tx
+      .select({ editedAt: shipUpdates.editedAt })
+      .from(shipUpdates)
+      .where(eq(shipUpdates.state, "published")),
+  );
+  const published = rows.length;
+  const edited = rows.filter((r) => r.editedAt != null).length;
+  return { published, edited, editedRate: published === 0 ? 0 : edited / published };
+}
+
 /** Read a candidate by its idempotency key (RLS-scoped → null if not the caller's). */
 export async function findCandidateBySourceEventKey(
   ctx: TenantContext,

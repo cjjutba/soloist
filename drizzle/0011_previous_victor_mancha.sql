@@ -1,0 +1,1 @@
+ALTER TABLE "ship_updates" ADD COLUMN "edited_at" timestamp with time zone;

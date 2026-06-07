@@ -69,7 +69,7 @@ development_status:
   3-2-connect-disconnect-github-repositories: done
   3-2-1-per-tenant-github-installation-binding: done
   3-3-auto-pull-commits-prs-releases-candidates: done
-  3-4-founder-readable-rendering-heuristic: backlog
+  3-4-founder-readable-rendering-heuristic: done
   3-5-curate-candidates-edit-status-dismiss: backlog
   3-6-publish-the-privacy-gate-minimal-email-on-publish: backlog
   3-7-client-ship-feed-live-via-polling: backlog
