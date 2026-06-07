@@ -3,10 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Bell, Loader2, LogOut } from "lucide-react";
+import { Loader2, LogOut } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/server/auth/client";
+import { NotificationBell } from "./notification-bell";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -70,24 +71,11 @@ export function PortalNav({ clientName, clientEmail }: { clientName: string; cli
     );
   }
 
-  const bellActive = pathname === "/portal/notifications";
-
   return (
     <nav aria-label="Portal" className="flex items-center gap-0.5">
       {navLink("/portal", "Updates")}
       {navLink("/portal/documents", "Documents")}
-      <Link
-        href="/portal/notifications"
-        aria-label="Notifications"
-        aria-current={bellActive ? "page" : undefined}
-        className={cn(
-          "flex min-h-11 min-w-11 items-center justify-center rounded-[var(--radius-md)] transition-colors",
-          FOCUS_RING,
-          bellActive ? "text-primary" : "text-muted-foreground hover:text-foreground",
-        )}
-      >
-        <Bell className="size-5" aria-hidden />
-      </Link>
+      <NotificationBell />
 
       <div className="relative">
         <button

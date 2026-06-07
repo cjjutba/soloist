@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../index";
 import { withTenant, type TenantContext } from "../context";
 import { branding, engagements, notifications, shipUpdates, tenants } from "../schema";
@@ -31,6 +31,65 @@ export async function createNotification(
       .onConflictDoNothing()
       .returning();
     return row ?? null; // null = already notified (dedup)
+  });
+}
+
+/** The Client's notification center (Story 4.1): the caller's OWN notifications newest-first, with
+ * the linked ship_update's title/status. **`user_id = ctx.userId`** is the load-bearing recipient
+ * scope — the `notification_scope` RLS confines reads to the Tenant+Engagement, but a notification
+ * carries a recipient, so a Client must see only their own (not a future Freelancer row on the same
+ * engagement). LEFT JOIN ship_updates (title/status may be null for non-`ship_published` types). */
+export async function listNotifications(ctx: TenantContext) {
+  return withTenant(ctx, (tx) =>
+    tx
+      .select({
+        id: notifications.id,
+        type: notifications.type,
+        readAt: notifications.readAt,
+        createdAt: notifications.createdAt,
+        shipUpdateId: notifications.shipUpdateId,
+        title: shipUpdates.title,
+        statusTag: shipUpdates.statusTag,
+      })
+      .from(notifications)
+      .leftJoin(shipUpdates, eq(shipUpdates.id, notifications.shipUpdateId))
+      .where(eq(notifications.userId, ctx.userId))
+      .orderBy(desc(notifications.createdAt)),
+  );
+}
+
+/** Mark specific notifications read (Story 4.1). Guarded `user_id = ctx.userId AND read_at IS NULL`
+ * → only the caller's own, idempotent (a replay/already-read is a no-op). Returns the count moved. */
+export async function markNotificationsRead(
+  ctx: TenantContext,
+  ids: string[],
+): Promise<{ count: number }> {
+  if (ids.length === 0) return { count: 0 };
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx
+      .update(notifications)
+      .set({ readAt: sql`now()` })
+      .where(
+        and(
+          inArray(notifications.id, ids),
+          eq(notifications.userId, ctx.userId),
+          isNull(notifications.readAt),
+        ),
+      )
+      .returning({ id: notifications.id });
+    return { count: rows.length };
+  });
+}
+
+/** Mark ALL the caller's unread notifications read (Story 4.1, "Mark all as read"). */
+export async function markAllNotificationsRead(ctx: TenantContext): Promise<{ count: number }> {
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx
+      .update(notifications)
+      .set({ readAt: sql`now()` })
+      .where(and(eq(notifications.userId, ctx.userId), isNull(notifications.readAt)))
+      .returning({ id: notifications.id });
+    return { count: rows.length };
   });
 }
 

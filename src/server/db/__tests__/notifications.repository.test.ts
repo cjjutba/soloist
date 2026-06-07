@@ -14,7 +14,13 @@ vi.mock("../index", () => ({
   },
 }));
 
-import { createNotification, loadShipPublishedContext } from "../repositories/notifications.repository";
+import {
+  createNotification,
+  listNotifications,
+  loadShipPublishedContext,
+  markAllNotificationsRead,
+  markNotificationsRead,
+} from "../repositories/notifications.repository";
 import { createEngagement } from "../repositories/engagements.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
 
@@ -112,5 +118,81 @@ describe("Story 3.6 — notifications repository", () => {
     // No branding set for Alpha → null logo/accent (the email falls back).
     expect(ctx?.logoUrl).toBeNull();
     expect(ctx?.accentHex).toBeNull();
+  });
+});
+
+describe("Story 4.1 — notification center reads + mark-read", () => {
+  let ENG_C = "";
+  let SU1 = "";
+  let SU2 = "";
+  let N_UNREAD = "";
+  let N_READ = "";
+  let N_OWNER = ""; // a notification for owner-a (a 2nd recipient on the same engagement)
+  // The Client recipient + a SECOND recipient on the SAME engagement (proves the user_id filter).
+  const clientCtx = (): TenantContext => ({ tenantId: TENANT_A, userId: "client-c", role: "client", engagementId: ENG_C });
+  const clientCtxB = (): TenantContext => ({ tenantId: TENANT_B, userId: "client-c", role: "client", engagementId: ENG_C });
+
+  beforeAll(async () => {
+    await h.db!.insert(user).values({ id: "client-c", name: "Client C", email: "client-c@example.com" });
+    ENG_C = (await createEngagement(sysA(), { name: "Notif", clientDisplayName: "Acme C" })).id;
+    const mkSu = async (title: string) => {
+      const [su] = await h.db!
+        .insert(schema.shipUpdates)
+        .values({ tenantId: TENANT_A, engagementId: ENG_C, statusTag: "shipped", title, source: "github", state: "published" })
+        .returning();
+      return su.id;
+    };
+    SU1 = await mkSu("Shipped onboarding");
+    SU2 = await mkSu("Shipped billing");
+    const [n1] = await h.db!
+      .insert(schema.notifications)
+      .values({ tenantId: TENANT_A, engagementId: ENG_C, userId: "client-c", type: "ship_published", shipUpdateId: SU1, createdAt: new Date("2026-02-02T00:00:00Z") })
+      .returning();
+    N_UNREAD = n1.id;
+    const [n2] = await h.db!
+      .insert(schema.notifications)
+      .values({ tenantId: TENANT_A, engagementId: ENG_C, userId: "client-c", type: "ship_published", shipUpdateId: SU2, createdAt: new Date("2026-02-01T00:00:00Z"), readAt: new Date("2026-02-03T00:00:00Z") })
+      .returning();
+    N_READ = n2.id;
+    // A SECOND recipient (owner-a) on the SAME engagement — must NOT appear in / be markable by client-c.
+    const [nOwner] = await h.db!
+      .insert(schema.notifications)
+      .values({ tenantId: TENANT_A, engagementId: ENG_C, userId: "owner-a", type: "ship_published", shipUpdateId: SU1, createdAt: new Date("2026-02-04T00:00:00Z") })
+      .returning();
+    N_OWNER = nOwner.id;
+  });
+
+  it("listNotifications: the caller's OWN rows newest-first, joined to the ship_update, NOT another recipient's", async () => {
+    const list = await listNotifications(clientCtx());
+    expect(list.map((r) => r.id)).toEqual([N_UNREAD, N_READ]); // newest-first, only client-c's (owner-a absent)
+    expect(list[0]).toMatchObject({ title: "Shipped onboarding", statusTag: "shipped", readAt: null });
+    expect(list[1].readAt).not.toBeNull();
+    // The owner-a notification (same engagement) is excluded by the user_id filter.
+    expect(list.some((r) => r.shipUpdateId === SU1 && r.id !== N_UNREAD)).toBe(false);
+  });
+
+  it("markNotificationsRead: stamps read_at once (replay → 0), only the caller's own", async () => {
+    // A co-recipient's row in the SAME engagement passes RLS but is excluded by the user_id filter.
+    expect(await markNotificationsRead(clientCtx(), [N_OWNER])).toEqual({ count: 0 });
+    const [owner] = await h.db!.select().from(schema.notifications).where(eq(schema.notifications.id, N_OWNER));
+    expect(owner.readAt).toBeNull(); // owner-a's row is untouched by client-c
+
+    expect(await markNotificationsRead(clientCtx(), [N_UNREAD])).toEqual({ count: 1 });
+    expect(await markNotificationsRead(clientCtx(), [N_UNREAD])).toEqual({ count: 0 }); // already read
+    expect(await markNotificationsRead(clientCtx(), [])).toEqual({ count: 0 });
+  });
+
+  it("markAllNotificationsRead: clears all the caller's remaining unread", async () => {
+    // Seed one more unread for client-c, then mark-all.
+    await h.db!.insert(schema.notifications).values({ tenantId: TENANT_A, engagementId: ENG_C, userId: "client-c", type: "engagement_start", shipUpdateId: null, createdAt: new Date("2026-02-05T00:00:00Z") });
+    const res = await markAllNotificationsRead(clientCtx());
+    expect(res.count).toBeGreaterThanOrEqual(1);
+    expect(await markAllNotificationsRead(clientCtx())).toEqual({ count: 0 }); // nothing left
+    expect((await listNotifications(clientCtx())).every((r) => r.readAt != null)).toBe(true);
+  });
+
+  it("NFR-2: Tenant B sees/marks none of Tenant A's notifications (RLS)", async () => {
+    expect(await listNotifications(clientCtxB())).toHaveLength(0);
+    expect(await markNotificationsRead(clientCtxB(), [N_READ])).toEqual({ count: 0 });
   });
 });
