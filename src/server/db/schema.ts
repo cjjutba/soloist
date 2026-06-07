@@ -337,6 +337,46 @@ export const webhookEvents = pgTable("webhook_events", {
   processedAt: timestamp("processed_at", { withTimezone: true }),
 });
 
+/**
+ * In-app notifications (Story 3.6). Created by the `ship/update.published` Inngest fan-out for
+ * the Engagement's Client; Epic 4 builds the center/toast/prefs that read them. Dual-scope RLS
+ * (same shape as ship_updates) — a Client (engagement ctx) sees their Engagement's rows. The
+ * partial unique on (user_id, ship_update_id) makes the fan-out idempotent (a retry can't dupe).
+ */
+export const notifications = pgTable(
+  "notifications",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }), // the recipient (the Client)
+    type: text("type").notNull(), // ship_published (v1) | invoice_sent | engagement_start (later)
+    shipUpdateId: uuid("ship_update_id").references(() => shipUpdates.id, { onDelete: "cascade" }),
+    readAt: timestamp("read_at", { withTimezone: true }), // Epic 4 marks read
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Fan-out idempotency: one ship_published notification per (recipient, ship_update). The
+    // partial WHERE leaves future null-ship_update_id rows (invoice/engagement) unconstrained.
+    uniqueIndex("notifications_ship_dedup")
+      .on(t.userId, t.shipUpdateId)
+      .where(sql`ship_update_id IS NOT NULL`),
+    pgPolicy("notification_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
 export type Engagement = typeof engagements.$inferSelect;
@@ -346,3 +386,4 @@ export type ShipUpdate = typeof shipUpdates.$inferSelect;
 export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type RepoConnection = typeof repoConnections.$inferSelect;
 export type GithubInstallation = typeof githubInstallations.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;

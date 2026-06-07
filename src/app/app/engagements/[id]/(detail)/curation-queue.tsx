@@ -9,6 +9,10 @@ import {
   dismissCandidateAction,
   editCandidateAction,
 } from "@/server/ship-feed/curation.actions";
+import {
+  bulkPublishCandidatesAction,
+  publishCandidateAction,
+} from "@/server/ship-feed/publish.actions";
 import { CandidateRow } from "./candidate-row";
 import { isEditableTarget, nextIndex } from "./keyboard";
 
@@ -40,6 +44,10 @@ export function CurationQueue({
   const [bulkBusy, setBulkBusy] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
   const registry = useRef<Map<string, RowApi>>(new Map());
+  // Per-candidate in-flight guard — dedupes a double-click / `p`/`x` key-repeat on the SAME row
+  // (a second concurrent publish/dismiss would hit the state guard → null → a confusing
+  // "no longer in your queue" error right after a success). Ref, so it never triggers a re-render.
+  const inFlight = useRef<Set<string>>(new Set());
 
   const register = useCallback((id: string, api: RowApi) => {
     registry.current.set(id, api);
@@ -61,17 +69,47 @@ export function CurationQueue({
 
   const onDismiss = useCallback(
     async (id: string) => {
-      const res = await dismissCandidateAction({ id, engagementId });
-      if (res.ok) {
-        toast.success("Candidate dismissed.");
-        setSelected((s) => {
-          const n = new Set(s);
-          n.delete(id);
-          return n;
-        });
-        router.refresh();
-      } else {
-        toast.error(res.error);
+      if (inFlight.current.has(id)) return;
+      inFlight.current.add(id);
+      try {
+        const res = await dismissCandidateAction({ id, engagementId });
+        if (res.ok) {
+          toast.success("Candidate dismissed.");
+          setSelected((s) => {
+            const n = new Set(s);
+            n.delete(id);
+            return n;
+          });
+          router.refresh();
+        } else {
+          toast.error(res.error);
+        }
+      } finally {
+        inFlight.current.delete(id);
+      }
+    },
+    [engagementId, router],
+  );
+
+  const onPublish = useCallback(
+    async (id: string) => {
+      if (inFlight.current.has(id)) return;
+      inFlight.current.add(id);
+      try {
+        const res = await publishCandidateAction({ id, engagementId });
+        if (res.ok) {
+          toast.success("Published — your client will be notified.");
+          setSelected((s) => {
+            const n = new Set(s);
+            n.delete(id);
+            return n;
+          });
+          router.refresh();
+        } else {
+          toast.error(res.error);
+        }
+      } finally {
+        inFlight.current.delete(id);
       }
     },
     [engagementId, router],
@@ -153,11 +191,17 @@ export function CurationQueue({
             void onDismiss(id);
           }
           break;
+        case "p":
+          if (id) {
+            e.preventDefault();
+            void onPublish(id);
+          }
+          break;
       }
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [focusedId, candidates, onSetStatus, onDismiss]);
+  }, [focusedId, candidates, onSetStatus, onDismiss, onPublish]);
 
   async function onBulkDismiss() {
     if (selected.size === 0) return;
@@ -165,6 +209,20 @@ export function CurationQueue({
     const res = await bulkDismissCandidatesAction({ ids: [...selected], engagementId });
     if (res.ok) {
       toast.success(`Dismissed ${res.count} ${res.count === 1 ? "candidate" : "candidates"}.`);
+      setSelected(new Set());
+      router.refresh();
+    } else {
+      toast.error(res.error);
+    }
+    setBulkBusy(false);
+  }
+
+  async function onBulkPublish() {
+    if (selected.size === 0) return;
+    setBulkBusy(true);
+    const res = await bulkPublishCandidatesAction({ ids: [...selected], engagementId });
+    if (res.ok) {
+      toast.success(`Published ${res.count} ${res.count === 1 ? "update" : "updates"}.`);
       setSelected(new Set());
       router.refresh();
     } else {
@@ -194,7 +252,8 @@ export function CurationQueue({
           <span className="font-mono">j</span>/<span className="font-mono">k</span> move ·{" "}
           <span className="font-mono">e</span> edit · <span className="font-mono">1</span>/
           <span className="font-mono">2</span>/<span className="font-mono">3</span> set ✅/🚧/📦 ·{" "}
-          <span className="font-mono">x</span> dismiss · <span className="font-mono">Esc</span> exits an edit
+          <span className="font-mono">p</span> publish · <span className="font-mono">x</span> dismiss ·{" "}
+          <span className="font-mono">Esc</span> exits an edit
         </div>
       ) : null}
 
@@ -211,6 +270,9 @@ export function CurationQueue({
             <Button variant="outline" size="sm" onClick={onBulkDismiss} loading={bulkBusy}>
               Dismiss selected
             </Button>
+            <Button variant="default" size="sm" onClick={onBulkPublish} loading={bulkBusy}>
+              Publish selected
+            </Button>
           </div>
         </div>
       ) : null}
@@ -226,6 +288,7 @@ export function CurationQueue({
               onToggleSelect={() => toggleSelect(c.id)}
               onSetStatus={(statusTag) => onSetStatus(c.id, statusTag)}
               onDismiss={() => onDismiss(c.id)}
+              onPublish={() => onPublish(c.id)}
               onSaveField={(patch) => onSaveField(c.id, patch)}
               register={register}
             />

@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { withTenant, type TenantContext } from "../context";
-import { shipUpdates } from "../schema";
+import { engagements, shipUpdates } from "../schema";
 
 /** Create a CANDIDATE ShipUpdate (Story 3.1) — freelancer-only until an explicit publish
  * (Story 3.6). Idempotent: `onConflictDoNothing` on the `(engagement_id, source_event_key)`
@@ -125,6 +125,70 @@ export async function dismissCandidates(
       .returning({ id: shipUpdates.id });
     return { count: rows.length };
   });
+}
+
+/** THE PUBLISH GATE (Story 3.6) — the ONLY path that makes a candidate Client-visible. In one tx:
+ * flip `candidate→published`, stamp `published_at`, and bump the Engagement's `last_activity_at`
+ * (atomic). Guarded `state='candidate'` → null on a replay / a published-or-dismissed row / a
+ * foreign tenant (RLS + the guard). The caller emits Inngest `ship/update.published` after. */
+export async function publishShipUpdate(ctx: TenantContext, id: string) {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .update(shipUpdates)
+      .set({ state: "published", publishedAt: sql`now()` })
+      .where(and(eq(shipUpdates.id, id), eq(shipUpdates.state, "candidate")))
+      .returning();
+    if (!row) return null;
+    await tx
+      .update(engagements)
+      .set({ lastActivityAt: sql`now()` })
+      // RLS already confines this to the caller's tenant; the explicit tenant_id is defense-in-
+      // depth so the gate's tenant-safety isn't solely RLS-dependent.
+      .where(and(eq(engagements.id, row.engagementId), eq(engagements.tenantId, ctx.tenantId)));
+    return row;
+  });
+}
+
+/** Bulk publish (Story 3.6, the `lg+` bulk-select). Same gate guard; bumps each distinct
+ * Engagement's last-activity once. Returns the published rows so the caller can emit one
+ * `ship/update.published` per row. */
+export async function publishShipUpdates(ctx: TenantContext, ids: string[]) {
+  if (ids.length === 0) return [];
+  return withTenant(ctx, async (tx) => {
+    const rows = await tx
+      .update(shipUpdates)
+      .set({ state: "published", publishedAt: sql`now()` })
+      .where(and(inArray(shipUpdates.id, ids), eq(shipUpdates.state, "candidate")))
+      .returning();
+    const engagementIds = [...new Set(rows.map((r) => r.engagementId))];
+    if (engagementIds.length > 0) {
+      await tx
+        .update(engagements)
+        .set({ lastActivityAt: sql`now()` })
+        .where(inArray(engagements.id, engagementIds));
+    }
+    return rows;
+  });
+}
+
+/** The CLIENT-SAFE published feed read (Story 3.6 privacy backstop; the 3.7 feed UI renders it).
+ * Selects ONLY the Client projection `{id,status_tag,title,summary,published_at}` — **never
+ * `raw_meta`** — and only `state='published'` rows. RLS scopes a Client (engagement ctx) to their
+ * own Engagement, so candidates are doubly unreachable (the state filter + the projection). */
+export async function listPublishedUpdates(ctx: TenantContext, engagementId: string) {
+  return withTenant(ctx, (tx) =>
+    tx
+      .select({
+        id: shipUpdates.id,
+        statusTag: shipUpdates.statusTag,
+        title: shipUpdates.title,
+        summary: shipUpdates.summary,
+        publishedAt: shipUpdates.publishedAt,
+      })
+      .from(shipUpdates)
+      .where(and(eq(shipUpdates.engagementId, engagementId), eq(shipUpdates.state, "published")))
+      .orderBy(desc(shipUpdates.publishedAt)),
+  );
 }
 
 /** The dashboard's "needs attention" counts (Story 3.5 makes Story 2.2's badge real): the number

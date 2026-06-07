@@ -30,3 +30,17 @@ export const bulkDismissSchema = z.object({
   engagementId: z.uuid(),
 });
 export type BulkDismissInput = z.infer<typeof bulkDismissSchema>;
+
+/** Publish one candidate (Story 3.6 — the privacy gate). */
+export const publishCandidateSchema = z.object({
+  id: z.uuid(),
+  engagementId: z.uuid(),
+});
+export type PublishCandidateInput = z.infer<typeof publishCandidateSchema>;
+
+/** Bulk-publish (Story 3.6, `lg+` bulk-select). */
+export const bulkPublishSchema = z.object({
+  ids: z.array(z.uuid()).min(1, "Select at least one candidate.").max(100, "Publish at most 100 at a time."),
+  engagementId: z.uuid(),
+});
+export type BulkPublishInput = z.infer<typeof bulkPublishSchema>;

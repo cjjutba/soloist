@@ -18,6 +18,7 @@ type Props = {
   onToggleSelect: () => void;
   onSetStatus: (statusTag: string) => void;
   onDismiss: () => void;
+  onPublish: () => void;
   /** Returns true on success; the row reverts its local value on false. */
   onSaveField: (patch: { title?: string; summary?: string | null }) => Promise<boolean>;
   /** Register this row's imperative handle (for the `e` shortcut) under its id; returns an
@@ -27,8 +28,9 @@ type Props = {
 };
 
 /** One curation-queue row = a ship-update card in edit mode (DESIGN.md L182): inline-edit title
- * (click or `e` → blur saves, Esc reverts), a status segmented toggle, and a dismiss control.
- * No Publish — that's the Story 3.6 gate. `raw_meta` is never passed in, let alone rendered. */
+ * (click or `e` → blur saves, Esc reverts), a status segmented toggle, a dismiss control, and the
+ * Publish gate (Story 3.6 — the deliberate commit to Client-visible). `raw_meta` is never passed
+ * in, let alone rendered. */
 export function CandidateRow({
   candidate,
   focused,
@@ -37,6 +39,7 @@ export function CandidateRow({
   onToggleSelect,
   onSetStatus,
   onDismiss,
+  onPublish,
   onSaveField,
   register,
 }: Props) {
@@ -225,15 +228,19 @@ export function CandidateRow({
               })}
             </div>
 
-            <span className="ml-auto flex items-center gap-3">
+            <span className="ml-auto flex items-center gap-2">
               <time
                 dateTime={candidate.createdAt.toISOString()}
-                className="font-mono text-xs text-muted-foreground"
+                className="mr-1 font-mono text-xs text-muted-foreground"
               >
                 {formatRelativeTime(candidate.createdAt)}
               </time>
               <Button variant="ghost" size="sm" onClick={onDismiss}>
                 Dismiss
+              </Button>
+              {/* The deliberate gate — Soloist Ink primary. Crosses the privacy boundary. */}
+              <Button variant="default" size="sm" onClick={onPublish}>
+                Publish
               </Button>
             </span>
           </div>

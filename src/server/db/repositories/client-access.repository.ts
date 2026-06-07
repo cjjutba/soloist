@@ -1,7 +1,7 @@
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { db } from "../index";
 import { withTenant, type TenantContext } from "../context";
-import { clientAccess, invitations } from "../schema";
+import { clientAccess, invitations, user } from "../schema";
 
 /** Thrown when the invitation was already consumed by a concurrent/replayed accept — the
  * conditional stamp matched 0 rows, so the whole tx rolls back (single-use is atomic). */
@@ -24,6 +24,23 @@ export async function findClientAccessByUserId(userId: string) {
     .select()
     .from(clientAccess)
     .where(eq(clientAccess.userId, userId))
+    .limit(1);
+  return row ?? null;
+}
+
+/**
+ * Find the Client recipient for an Engagement (Story 3.6 fan-out): the one Client who accepted
+ * the invite (engagement_id is UNIQUE → at most one), joined to `user` for the email. Raw `db`
+ * (the Inngest fan-out has no session); SAFE because it is keyed on the trusted published-event's
+ * `engagementId`, never request input. Returns null if no Client has accepted yet — the fan-out
+ * then no-ops (the feed still shows the update once they join).
+ */
+export async function findClientRecipientForEngagement(engagementId: string) {
+  const [row] = await db
+    .select({ userId: clientAccess.userId, email: user.email, name: user.name })
+    .from(clientAccess)
+    .innerJoin(user, eq(user.id, clientAccess.userId))
+    .where(eq(clientAccess.engagementId, engagementId))
     .limit(1);
   return row ?? null;
 }

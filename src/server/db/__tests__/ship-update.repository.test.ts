@@ -21,6 +21,9 @@ import {
   dismissCandidates,
   findCandidateBySourceEventKey,
   listCandidates,
+  listPublishedUpdates,
+  publishShipUpdate,
+  publishShipUpdates,
   renderingQualityStat,
   updateCandidate,
 } from "../repositories/ship-update.repository";
@@ -213,5 +216,77 @@ describe("Story 3.5 — curation queue (list / edit / dismiss / count)", () => {
     await mk(eng, "p", { state: "published" });
     expect((await countCandidatesByEngagement(ctxA())).get(eng)).toBe(2);
     expect((await countCandidatesByEngagement(ctxB())).get(eng)).toBeUndefined(); // RLS
+  });
+});
+
+describe("Story 3.6 — the publish gate + the client-safe feed read", () => {
+  const mk = async (
+    engagementId: string,
+    title: string,
+    opts: { state?: string; rawMeta?: unknown } = {},
+  ): Promise<string> => {
+    const [row] = await h.db!
+      .insert(schema.shipUpdates)
+      .values({
+        tenantId: TENANT_A,
+        engagementId,
+        statusTag: "shipped",
+        title,
+        source: "github",
+        state: opts.state ?? "candidate",
+        rawMeta: opts.rawMeta ?? null,
+      })
+      .returning();
+    return row.id;
+  };
+
+  it("publishShipUpdate flips candidate→published, stamps published_at, bumps last_activity; idempotent + RLS", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Pub", clientDisplayName: "Acme" })).id;
+    await h.db!
+      .update(schema.engagements)
+      .set({ lastActivityAt: new Date("2020-01-01T00:00:00Z") })
+      .where(eq(schema.engagements.id, eng));
+    const id = await mk(eng, "ready");
+
+    const row = await publishShipUpdate(ctxA(), id);
+    expect(row?.state).toBe("published");
+    expect(row?.publishedAt).not.toBeNull();
+    const [e] = await h.db!.select().from(schema.engagements).where(eq(schema.engagements.id, eng));
+    expect(e.lastActivityAt.getTime()).toBeGreaterThan(new Date("2020-01-01T00:00:00Z").getTime());
+
+    expect(await publishShipUpdate(ctxA(), id)).toBeNull(); // replay (already published)
+    const id2 = await mk(eng, "foreign");
+    expect(await publishShipUpdate(ctxB(), id2)).toBeNull(); // RLS — Tenant B can't publish A's
+    const dis = await mk(eng, "dismissed", { state: "dismissed" });
+    expect(await publishShipUpdate(ctxA(), dis)).toBeNull(); // state guard
+  });
+
+  it("publishShipUpdates bulk-publishes only candidates; empty → []", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Bulk-pub", clientDisplayName: "Acme" })).id;
+    const a = await mk(eng, "a");
+    const b = await mk(eng, "b");
+    const pub = await mk(eng, "already", { state: "published" });
+    const rows = await publishShipUpdates(ctxA(), [a, b, pub]);
+    expect(rows).toHaveLength(2); // `pub` skipped by the state guard
+    expect(await publishShipUpdates(ctxA(), [])).toEqual([]);
+  });
+
+  it("NFR-2/3: a CLIENT ctx reads ONLY published projections — no candidates, no rawMeta, no other engagement", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Feed", clientDisplayName: "Acme" })).id;
+    const other = (await createEngagement(ctxA(), { name: "Other", clientDisplayName: "Beta" })).id;
+    const p1 = await mk(eng, "shipped feature", { rawMeta: { headSha: "deadbeef" } });
+    await publishShipUpdate(ctxA(), p1);
+    await mk(eng, "secret candidate", { rawMeta: { headSha: "secret" } }); // still candidate
+    await mk(eng, "dismissed noise", { state: "dismissed" });
+    const pOther = await mk(other, "other engagement update");
+    await publishShipUpdate(ctxA(), pOther);
+
+    // A Client is scoped to their ONE engagement (RLS sets app.engagement_id).
+    const clientCtx = { tenantId: TENANT_A, userId: "client-x", role: "client", engagementId: eng } as const;
+    const feed = await listPublishedUpdates(clientCtx, eng);
+
+    expect(feed.map((r) => r.title)).toEqual(["shipped feature"]); // published-only, this engagement only
+    expect(feed.some((r) => r.title === "secret candidate")).toBe(false); // candidates invisible
+    expect("rawMeta" in feed[0]).toBe(false); // the projection NEVER selects raw_meta
   });
 });

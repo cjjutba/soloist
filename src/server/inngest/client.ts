@@ -12,3 +12,11 @@ export type GithubEventReceived = {
   eventType: string;
   payload: unknown;
 };
+
+/** The payload for `ship/update.published` (Story 3.6) — minimal ids; the fan-out re-reads the
+ * notification + email data (same pattern as `github/event.received`). */
+export type ShipPublished = {
+  shipUpdateId: string;
+  engagementId: string;
+  tenantId: string;
+};

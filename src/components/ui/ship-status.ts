@@ -9,17 +9,23 @@ export const SHIP_STATUS = {
   shipped: {
     label: "Shipped",
     emoji: "✅",
-    classes: "bg-[#ECFDF3] text-[#15803D]",
+    classes: "bg-[#ECFDF3] text-[#15803D]", // app (Tailwind, JIT needs literals)
+    bg: "#ECFDF3", // email (inline styles can't use Tailwind classes)
+    fg: "#15803D",
   },
   in_progress: {
     label: "In Progress",
     emoji: "🚧",
     classes: "bg-[#FEF6E7] text-[#92400E]",
+    bg: "#FEF6E7",
+    fg: "#92400E",
   },
   next: {
     label: "Next",
     emoji: "📦",
     classes: "bg-[#F1F5F9] text-[#475569]",
+    bg: "#F1F5F9",
+    fg: "#475569",
   },
 } as const;
 

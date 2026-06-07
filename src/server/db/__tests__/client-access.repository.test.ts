@@ -17,6 +17,7 @@ vi.mock("../index", () => ({
 import {
   acceptInvitationTx,
   findClientAccessByUserId,
+  findClientRecipientForEngagement,
   InvitationAlreadyAcceptedError,
   markOnboarded,
 } from "../repositories/client-access.repository";
@@ -138,5 +139,18 @@ describe("Story 2.4 — pre-auth + scope-resolution reads", () => {
       .from(schema.clientAccess)
       .where(eq(schema.clientAccess.engagementId, ENG_A));
     expect(second.onboardedAt).toEqual(first.onboardedAt);
+  });
+});
+
+describe("Story 3.6 — the publish fan-out recipient lookup", () => {
+  it("findClientRecipientForEngagement returns the Engagement's Client (joined to user.email)", async () => {
+    // `client_user` accepted ENG_A in the 2.4 block above.
+    const recipient = await findClientRecipientForEngagement(ENG_A);
+    expect(recipient).toEqual({ userId: "client_user", email: "client@acme.com", name: "Client" });
+  });
+
+  it("returns null for an Engagement whose Client hasn't accepted yet", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "No client yet", clientDisplayName: "Nobody" })).id;
+    expect(await findClientRecipientForEngagement(eng)).toBeNull();
   });
 });
