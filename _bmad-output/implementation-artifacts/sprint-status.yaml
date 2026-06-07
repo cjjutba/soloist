@@ -82,7 +82,7 @@ development_status:
   4-1-in-app-notification-center: done
   4-2-toast-on-publish-when-active: done
   4-3-polished-branded-email-templates-email-accessibility: done
-  4-4-other-events-per-client-notification-preference: backlog
+  4-4-other-events-per-client-notification-preference: done
   epic-4-retrospective: optional
 
   # ── Epic 5: Doc Engine — Invoices ──

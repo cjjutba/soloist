@@ -51,10 +51,10 @@ describe("getAppSession (role derived from the data model, not the cookie)", () 
     expect(m.findClientAccess).not.toHaveBeenCalled(); // freelancer hot path: no extra query
   });
 
-  it("maps a user with a ClientAccess row to role=client + engagementId + onboardedAt (Story 2.4/2.5)", async () => {
+  it("maps a user with a ClientAccess row to role=client + engagementId + onboardedAt + notificationsEnabled (Story 2.4/2.5/4.4)", async () => {
     m.getSession.mockResolvedValue(noTenant);
     const onboardedAt = new Date("2026-06-02T00:00:00Z");
-    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt });
+    m.findClientAccess.mockResolvedValue({ tenantId: "t9", engagementId: "e9", userId: "u2", role: "client", onboardedAt, notificationsEnabled: false });
     expect(await getAppSession()).toEqual({
       userId: "u2",
       name: "Nobody",
@@ -64,6 +64,7 @@ describe("getAppSession (role derived from the data model, not the cookie)", () 
       role: "client",
       engagementId: "e9",
       onboardedAt,
+      notificationsEnabled: false, // surfaced free off the ClientAccess row (Story 4.4)
     });
   });
 

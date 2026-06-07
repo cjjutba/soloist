@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { user } from "./auth-schema";
 
@@ -184,6 +184,10 @@ export const clientAccess = pgTable(
     // Stamped when the Client finishes the one-time branded Onboarding (Story 2.5);
     // null = not yet onboarded → route them through the hero.
     onboardedAt: timestamp("onboarded_at", { withTimezone: true }),
+    // Per-Client GLOBAL notification on/off (Story 4.4). The publish fan-out gates on this
+    // BEFORE sending → off = no in-app row, no email, no toast (the Ship Feed still shows
+    // updates — it reads ship_updates, not notifications). Opt-OUT: default true.
+    notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [

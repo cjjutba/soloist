@@ -1,5 +1,5 @@
 import { env } from "@/env";
-import { findClientRecipientForEngagement } from "@/server/db/repositories/client-access.repository";
+import { resolveNotifiableRecipient } from "@/server/db/repositories/client-access.repository";
 import {
   createNotification,
   loadShipPublishedContext,
@@ -11,6 +11,7 @@ export type ShipPublishedResult =
   | { status: "sent" }
   | { status: "notified-no-email" }
   | { status: "no-recipient" }
+  | { status: "muted" }
   | { status: "stale" };
 
 /**
@@ -21,10 +22,13 @@ export type ShipPublishedResult =
  * is already durable and is never rolled back.
  */
 export async function handleShipPublished(data: ShipPublished): Promise<ShipPublishedResult> {
-  // The Engagement's Client (raw system read, keyed on the trusted event id). None yet → no-op:
-  // the update is published and the feed will show it once the Client accepts their invite.
-  const recipient = await findClientRecipientForEngagement(data.engagementId);
-  if (!recipient) return { status: "no-recipient" };
+  // The event-agnostic notify gate (Story 4.4): the Engagement's Client AND their mute pref, in one
+  // raw system read keyed on the trusted event id. `no-recipient` = none accepted yet (the feed
+  // still shows it once they join); `muted` = the Client opted out → send NOTHING (no in-app row,
+  // no email; the 4.2 toast is transitively silent). Neither throws — both are terminal no-ops.
+  const resolved = await resolveNotifiableRecipient(data.engagementId);
+  if (resolved.status !== "ok") return { status: resolved.status };
+  const recipient = resolved.recipient;
 
   // In-app notification (idempotent via the partial unique).
   await createNotification(

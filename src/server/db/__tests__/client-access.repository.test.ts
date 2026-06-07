@@ -20,6 +20,8 @@ import {
   findClientRecipientForEngagement,
   InvitationAlreadyAcceptedError,
   markOnboarded,
+  resolveNotifiableRecipient,
+  setNotificationsEnabled,
 } from "../repositories/client-access.repository";
 import {
   findInvitationByTokenHash,
@@ -143,14 +145,62 @@ describe("Story 2.4 — pre-auth + scope-resolution reads", () => {
 });
 
 describe("Story 3.6 — the publish fan-out recipient lookup", () => {
-  it("findClientRecipientForEngagement returns the Engagement's Client (joined to user.email)", async () => {
-    // `client_user` accepted ENG_A in the 2.4 block above.
+  it("findClientRecipientForEngagement returns the Engagement's Client (joined to user.email) + the pref", async () => {
+    // `client_user` accepted ENG_A in the 2.4 block above. Default pref is ON.
     const recipient = await findClientRecipientForEngagement(ENG_A);
-    expect(recipient).toEqual({ userId: "client_user", email: "client@acme.com", name: "Client" });
+    expect(recipient).toEqual({
+      userId: "client_user",
+      email: "client@acme.com",
+      name: "Client",
+      notificationsEnabled: true,
+    });
   });
 
   it("returns null for an Engagement whose Client hasn't accepted yet", async () => {
     const eng = (await createEngagement(ctxA(), { name: "No client yet", clientDisplayName: "Nobody" })).id;
     expect(await findClientRecipientForEngagement(eng)).toBeNull();
+  });
+});
+
+describe("Story 4.4 — the notification preference + the event-agnostic notify gate", () => {
+  const clientCtx = (): TenantContext => ({
+    tenantId: TENANT_A,
+    engagementId: ENG_A,
+    userId: "client_user",
+    role: "client",
+  });
+
+  it("resolveNotifiableRecipient → {status:'ok'} when a Client accepted with notifications on (default)", async () => {
+    const res = await resolveNotifiableRecipient(ENG_A);
+    expect(res.status).toBe("ok");
+    if (res.status === "ok") expect(res.recipient.userId).toBe("client_user");
+  });
+
+  it("setNotificationsEnabled(false) → resolveNotifiableRecipient now returns {status:'muted'}", async () => {
+    await setNotificationsEnabled(clientCtx(), false);
+    const [row] = await h.db!
+      .select()
+      .from(schema.clientAccess)
+      .where(eq(schema.clientAccess.engagementId, ENG_A));
+    expect(row.notificationsEnabled).toBe(false);
+    expect((await resolveNotifiableRecipient(ENG_A)).status).toBe("muted");
+
+    // Turning it back on restores the {status:'ok'} recipient.
+    await setNotificationsEnabled(clientCtx(), true);
+    expect((await resolveNotifiableRecipient(ENG_A)).status).toBe("ok");
+  });
+
+  it("resolveNotifiableRecipient → {status:'no-recipient'} when no Client has accepted", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Empty", clientDisplayName: "Nobody" })).id;
+    expect((await resolveNotifiableRecipient(eng)).status).toBe("no-recipient");
+  });
+
+  it("setNotificationsEnabled is a no-op for a freelancer ctx (no engagementId)", async () => {
+    await setNotificationsEnabled(ctxA(), false); // ctxA has no engagementId
+    const [row] = await h.db!
+      .select()
+      .from(schema.clientAccess)
+      .where(eq(schema.clientAccess.engagementId, ENG_A));
+    expect(row.notificationsEnabled).toBe(true); // unchanged (still on from the prior test's restore)
   });
 });

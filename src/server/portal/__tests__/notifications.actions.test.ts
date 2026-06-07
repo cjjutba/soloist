@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   ctx: { tenantId: "t1", userId: "client-1", role: "client" as const, engagementId: "e1" },
   markNotificationsRead: vi.fn(),
   markAllNotificationsRead: vi.fn(),
+  setNotificationsEnabled: vi.fn(),
 }));
 
 vi.mock("@/server/auth/session", () => ({ requireClient: () => Promise.resolve(m.ctx) }));
@@ -14,14 +15,22 @@ vi.mock("@/server/db/repositories/notifications.repository", () => ({
   markNotificationsRead: m.markNotificationsRead,
   markAllNotificationsRead: m.markAllNotificationsRead,
 }));
+vi.mock("@/server/db/repositories/client-access.repository", () => ({
+  setNotificationsEnabled: m.setNotificationsEnabled,
+}));
 
-import { markAllNotificationsReadAction, markNotificationsReadAction } from "../notifications.actions";
+import {
+  markAllNotificationsReadAction,
+  markNotificationsReadAction,
+  setNotificationPrefAction,
+} from "../notifications.actions";
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.spyOn(console, "error").mockImplementation(() => {});
   m.markNotificationsRead.mockResolvedValue({ count: 2 });
   m.markAllNotificationsRead.mockResolvedValue({ count: 3 });
+  m.setNotificationsEnabled.mockResolvedValue(undefined);
 });
 
 describe("Story 4.1 — notification mark-read actions", () => {
@@ -57,5 +66,23 @@ describe("Story 4.1 — notification mark-read actions", () => {
     const res = await markAllNotificationsReadAction();
     expect(res).toEqual({ ok: true });
     expect(m.markAllNotificationsRead).toHaveBeenCalledWith(m.ctx);
+  });
+});
+
+describe("Story 4.4 — setNotificationPrefAction (global on/off)", () => {
+  it("passes the boolean to the repo (scoped to the caller) + returns ok", async () => {
+    expect(await setNotificationPrefAction({ enabled: false })).toEqual({ ok: true });
+    expect(m.setNotificationsEnabled).toHaveBeenCalledWith(m.ctx, false);
+  });
+
+  it("rejects a non-boolean payload before any repo call", async () => {
+    // @ts-expect-error — deliberately malformed input
+    expect(await setNotificationPrefAction({ enabled: "yes" })).toEqual({ ok: false });
+    expect(m.setNotificationsEnabled).not.toHaveBeenCalled();
+  });
+
+  it("a repo throw → {ok:false}", async () => {
+    m.setNotificationsEnabled.mockRejectedValue(new Error("db down"));
+    expect(await setNotificationPrefAction({ enabled: true })).toEqual({ ok: false });
   });
 });

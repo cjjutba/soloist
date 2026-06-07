@@ -41,6 +41,8 @@ export type AppSession = {
   engagementId?: string;
   // Client Onboarding flag (Story 2.5): null = not yet onboarded → route through the hero.
   onboardedAt?: Date | null;
+  // Client notification preference (Story 4.4): the global on/off the settings toggle reads.
+  notificationsEnabled?: boolean;
 };
 
 /** A guard-validated freelancer principal — also a valid `TenantContext` for the data layer. */
@@ -80,6 +82,7 @@ export const getAppSession = cache(async (): Promise<AppSession | null> => {
       role: "client",
       engagementId: access.engagementId,
       onboardedAt: access.onboardedAt, // already on the fetched row — no extra query
+      notificationsEnabled: access.notificationsEnabled, // same free read (Story 4.4)
     };
   }
   return { ...base, tenantId: null, role: null };

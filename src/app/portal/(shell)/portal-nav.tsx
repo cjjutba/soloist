@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Loader2, LogOut } from "lucide-react";
+import { Loader2, LogOut, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/server/auth/client";
@@ -109,6 +109,17 @@ export function PortalNav({ clientName, clientEmail }: { clientName: string; cli
               className="absolute right-0 top-full z-20 mt-1 w-56 rounded-[var(--radius-md)] border border-border bg-card p-1 shadow-md"
             >
               <p className="truncate px-3 py-2 text-xs text-muted-foreground">{clientEmail}</p>
+              <Link
+                href="/portal/settings"
+                onClick={() => setOpen(false)}
+                className={cn(
+                  "flex min-h-11 w-full items-center gap-2 rounded-[var(--radius-sm)] px-3 text-sm text-foreground transition-colors hover:bg-muted",
+                  FOCUS_RING,
+                )}
+              >
+                <Settings className="size-4" aria-hidden />
+                Settings
+              </Link>
               <button
                 type="button"
                 onClick={onLogout}

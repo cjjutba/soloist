@@ -1,0 +1,1 @@
+ALTER TABLE "client_access" ADD COLUMN "notifications_enabled" boolean DEFAULT true NOT NULL;

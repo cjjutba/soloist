@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const m = vi.hoisted(() => ({
-  findClientRecipientForEngagement: vi.fn(),
+  resolveNotifiableRecipient: vi.fn(),
   createNotification: vi.fn(),
   loadShipPublishedContext: vi.fn(),
   sendShipPublishedEmail: vi.fn(),
@@ -9,7 +9,7 @@ const m = vi.hoisted(() => ({
 
 vi.mock("@/env", () => ({ env: { BETTER_AUTH_URL: "https://soloist.cjjutba.com" } }));
 vi.mock("@/server/db/repositories/client-access.repository", () => ({
-  findClientRecipientForEngagement: m.findClientRecipientForEngagement,
+  resolveNotifiableRecipient: m.resolveNotifiableRecipient,
 }));
 vi.mock("@/server/db/repositories/notifications.repository", () => ({
   createNotification: m.createNotification,
@@ -21,7 +21,7 @@ vi.mock("../../client", () => ({ inngest: { createFunction: () => ({}) } }));
 import { handleShipPublished } from "../ship-published";
 
 const data = { shipUpdateId: "su1", engagementId: "eng1", tenantId: "t1" };
-const recipient = { userId: "client-1", email: "client@example.com", name: "Maya" };
+const recipient = { userId: "client-1", email: "client@example.com", name: "Maya", notificationsEnabled: true };
 const ctx = {
   statusTag: "shipped",
   title: "Made sign-in faster",
@@ -37,7 +37,7 @@ const ctx = {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  m.findClientRecipientForEngagement.mockResolvedValue(recipient);
+  m.resolveNotifiableRecipient.mockResolvedValue({ status: "ok", recipient });
   m.createNotification.mockResolvedValue({ id: "n1" });
   m.loadShipPublishedContext.mockResolvedValue(ctx);
   m.sendShipPublishedEmail.mockResolvedValue(undefined);
@@ -62,9 +62,17 @@ describe("Story 3.6 — ship-published fan-out", () => {
   });
 
   it("no recipient (client hasn't accepted) → no-op, neither notification nor email", async () => {
-    m.findClientRecipientForEngagement.mockResolvedValue(null);
+    m.resolveNotifiableRecipient.mockResolvedValue({ status: "no-recipient" });
     const res = await handleShipPublished(data);
     expect(res).toEqual({ status: "no-recipient" });
+    expect(m.createNotification).not.toHaveBeenCalled();
+    expect(m.sendShipPublishedEmail).not.toHaveBeenCalled();
+  });
+
+  it("Story 4.4: client muted notifications → no-op, neither notification nor email (feed still shows it)", async () => {
+    m.resolveNotifiableRecipient.mockResolvedValue({ status: "muted" });
+    const res = await handleShipPublished(data);
+    expect(res).toEqual({ status: "muted" });
     expect(m.createNotification).not.toHaveBeenCalled();
     expect(m.sendShipPublishedEmail).not.toHaveBeenCalled();
   });

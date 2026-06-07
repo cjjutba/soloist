@@ -371,6 +371,29 @@ describe("NFR-2 isolation — client_access (Story 2.4)", () => {
     });
     expect(rows).toHaveLength(0);
   });
+
+  it("(t2) Story 4.4: a Client's UNQUALIFIED update of notifications_enabled hits ONLY their own row; a foreign-engagement scope hits 0", async () => {
+    // The WHERE-less UPDATEs below are the load-bearing RLS proof: the engagement GUC — not an
+    // app predicate — must confine the write. If `client_access_scope` ever lost its engagement
+    // clause (tenant-only), the foreign-scoped write would see + flip ENG_A1's row → length 1 → fail.
+
+    // Scoped to ENG_A1: the client sees exactly their own row → an unqualified update touches 1.
+    const own = await asClient(TENANT_A, ENG_A1, (tx) =>
+      tx.update(clientAccess).set({ notificationsEnabled: false }).returning({ id: clientAccess.id }),
+    );
+    expect(own).toHaveLength(1);
+
+    // Scoped to ENG_A2 (no row of its own): the using-clause hides ENG_A1's row → 0 affected.
+    const foreign = await asClient(TENANT_A, ENG_A2, (tx) =>
+      tx.update(clientAccess).set({ notificationsEnabled: true }).returning({ id: clientAccess.id }),
+    );
+    expect(foreign).toHaveLength(0);
+
+    // Restore (so later reads of this row are unaffected).
+    await asClient(TENANT_A, ENG_A1, (tx) =>
+      tx.update(clientAccess).set({ notificationsEnabled: true }).where(eq(clientAccess.engagementId, ENG_A1)),
+    );
+  });
 });
 
 describe("NFR-2 isolation — ship_updates (Story 3.1)", () => {

@@ -37,12 +37,61 @@ export async function findClientAccessByUserId(userId: string) {
  */
 export async function findClientRecipientForEngagement(engagementId: string) {
   const [row] = await db
-    .select({ userId: clientAccess.userId, email: user.email, name: user.name })
+    .select({
+      userId: clientAccess.userId,
+      email: user.email,
+      name: user.name,
+      // The per-Client global notification on/off (Story 4.4) — the fan-out gates on it.
+      notificationsEnabled: clientAccess.notificationsEnabled,
+    })
     .from(clientAccess)
     .innerJoin(user, eq(user.id, clientAccess.userId))
     .where(eq(clientAccess.engagementId, engagementId))
     .limit(1);
   return row ?? null;
+}
+
+export type ClientRecipient = NonNullable<
+  Awaited<ReturnType<typeof findClientRecipientForEngagement>>
+>;
+
+/** Why a notification fan-out did/should proceed for an Engagement — the shared, event-agnostic
+ * gate result. `no-recipient` = no Client has accepted yet; `muted` = a Client opted out (4.4). */
+export type NotifiableResolution =
+  | { status: "ok"; recipient: ClientRecipient }
+  | { status: "no-recipient" }
+  | { status: "muted" };
+
+/**
+ * Resolve whether — and to whom — a notification should fire for an Engagement (Story 4.4): the
+ * single **event-agnostic** gate for the whole notification fan-out. It folds the recipient lookup
+ * and the per-Client mute together so NO event handler ever duplicates the pref logic. A future
+ * event (Epic 5 `invoice_sent`) calls THIS, then `createNotification({ type, shipUpdateId })` on
+ * `status === "ok"` — that is the "same fan-out" genericity (AC-1).
+ */
+export async function resolveNotifiableRecipient(
+  engagementId: string,
+): Promise<NotifiableResolution> {
+  const recipient = await findClientRecipientForEngagement(engagementId);
+  if (!recipient) return { status: "no-recipient" };
+  if (!recipient.notificationsEnabled) return { status: "muted" };
+  return { status: "ok", recipient };
+}
+
+/**
+ * Set the Client's global notification preference (Story 4.4). Scoped (RLS restricts to the
+ * caller's engagement) AND filtered by `engagement_id` defensively — the exact shape as
+ * `markOnboarded`. A freelancer ctx has no engagement → no-op (a freelancer must never own this).
+ */
+export async function setNotificationsEnabled(ctx: TenantContext, enabled: boolean): Promise<void> {
+  const engagementId = ctx.engagementId;
+  if (!engagementId) return; // client ctx only
+  await withTenant(ctx, async (tx) => {
+    await tx
+      .update(clientAccess)
+      .set({ notificationsEnabled: enabled })
+      .where(eq(clientAccess.engagementId, engagementId));
+  });
 }
 
 /**
