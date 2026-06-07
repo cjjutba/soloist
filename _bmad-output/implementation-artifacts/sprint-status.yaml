@@ -72,7 +72,7 @@ development_status:
   3-4-founder-readable-rendering-heuristic: done
   3-5-curate-candidates-edit-status-dismiss: done
   3-6-publish-the-privacy-gate-minimal-email-on-publish: done
-  3-7-client-ship-feed-live-via-polling: backlog
+  3-7-client-ship-feed-live-via-polling: done
   3-8-manual-ship-update-fallback: backlog
   3-9-github-degraded-error-states: backlog
   epic-3-retrospective: optional
