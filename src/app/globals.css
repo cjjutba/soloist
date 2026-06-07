@@ -98,3 +98,13 @@ body {
   color: var(--foreground);
   font-family: var(--font-sans), system-ui, sans-serif;
 }
+
+/* Story 4.2: sonner v2 doesn't honor prefers-reduced-motion natively — collapse the toast
+   entrance/exit to instant for users who asked for reduced motion (the toast still appears, it
+   just doesn't slide/fade). Applies to every toast, which is correct. */
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toast] {
+    transition: none !important;
+    animation: none !important;
+  }
+}

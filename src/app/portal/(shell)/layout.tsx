@@ -4,6 +4,7 @@ import { requireOnboardedClient } from "@/server/auth/session";
 import { resolveBrandingVars } from "@/server/branding/branding-vars";
 import { getBranding } from "@/server/db/repositories/branding.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
+import { NotificationToaster } from "./notification-toaster";
 import { PortalNav } from "./portal-nav";
 
 // The Client Portal SHELL (Story 2.6) — header (brand + minimal nav) + single-column,
@@ -37,6 +38,8 @@ export default async function PortalShellLayout({ children }: { children: ReactN
         </div>
       </header>
       <main className="mx-auto w-full max-w-2xl px-5 py-8">{children}</main>
+      {/* Story 4.2: render-null — toasts a new published update while the Client is active. */}
+      <NotificationToaster />
     </div>
   );
 }
