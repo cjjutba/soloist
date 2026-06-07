@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-06
-last_updated: 2026-06-06
+last_updated: 2026-06-07
 project: soloist
 project_key: NOKEY
 tracking_system: file-system
@@ -81,7 +81,7 @@ development_status:
   epic-4: in-progress
   4-1-in-app-notification-center: done
   4-2-toast-on-publish-when-active: done
-  4-3-polished-branded-email-templates-email-accessibility: backlog
+  4-3-polished-branded-email-templates-email-accessibility: done
   4-4-other-events-per-client-notification-preference: backlog
   epic-4-retrospective: optional
 
