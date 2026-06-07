@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-06
-last_updated: 2026-06-07
+last_updated: 2026-06-08
 project: soloist
 project_key: NOKEY
 tracking_system: file-system
@@ -83,7 +83,7 @@ development_status:
   4-2-toast-on-publish-when-active: done
   4-3-polished-branded-email-templates-email-accessibility: done
   4-4-other-events-per-client-notification-preference: done
-  epic-4-retrospective: optional
+  epic-4-retrospective: done
 
   # ── Epic 5: Doc Engine — Invoices ──
   epic-5: backlog
