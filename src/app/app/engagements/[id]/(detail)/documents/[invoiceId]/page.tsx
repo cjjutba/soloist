@@ -1,0 +1,48 @@
+import Link from "next/link";
+import { notFound } from "next/navigation";
+import { isUuid } from "@/lib/uuid";
+import { requireFreelancer } from "@/server/auth/session";
+import { getBranding } from "@/server/db/repositories/branding.repository";
+import { getEngagement } from "@/server/db/repositories/engagements.repository";
+import { getTenant } from "@/server/db/repositories/tenants.repository";
+import { getInvoice } from "@/server/db/repositories/invoices.repository";
+import { InvoiceDocument } from "../invoice-document";
+
+/** A single Invoice — the premium read-only document view (Story 5.1). Self-guards (the `[invoiceId]`
+ * route is nested under the `(detail)` layout, but defensively re-resolves). The invoice must belong
+ * to this Engagement (URL-tamper defense atop RLS). 5.2 adds send/status; 5.3 adds the PDF. */
+export default async function InvoiceViewPage({
+  params,
+}: {
+  params: Promise<{ id: string; invoiceId: string }>;
+}) {
+  const { id, invoiceId } = await params;
+  if (!isUuid(id) || !isUuid(invoiceId)) notFound();
+  const ctx = await requireFreelancer();
+
+  const [invoice, engagement, tenant, branding] = await Promise.all([
+    getInvoice(ctx, invoiceId),
+    getEngagement(ctx, id),
+    getTenant(ctx),
+    getBranding(ctx),
+  ]);
+  if (!invoice || !engagement || invoice.engagementId !== id) notFound(); // RLS-null / mismatch → 404
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Link
+        href={`/app/engagements/${id}/documents`}
+        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        ← Invoices
+      </Link>
+      <InvoiceDocument
+        invoice={invoice}
+        clientName={engagement.clientDisplayName}
+        tenantName={tenant?.name ?? "Your studio"}
+        logoUrl={branding?.logoBlobUrl ?? null}
+        accentHex={branding?.accentHex ?? "#5b5bd6"}
+      />
+    </div>
+  );
+}

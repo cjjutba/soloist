@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, integer, jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { user } from "./auth-schema";
 
@@ -47,6 +47,10 @@ export const tenants = pgTable(
     // Stamped by Better Auth's afterEmailVerification hook — the Tenant lifecycle
     // marker (AC-2). Real access enforcement rides on requireEmailVerification.
     activatedAt: timestamp("activated_at", { withTimezone: true }),
+    // Per-Tenant invoice number counter (Story 5.1). Bumped atomically inside the
+    // create-invoice tx (UPDATE … +1 RETURNING) — the row lock serializes concurrent
+    // creates so invoice numbers are unique per Tenant. Starts at 0 → first invoice is #1.
+    invoiceSeq: integer("invoice_seq").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [
@@ -381,6 +385,51 @@ export const notifications = pgTable(
   ],
 );
 
+/**
+ * A billing document for an Engagement (Story 5.1 — the Doc Engine's first `DocumentType`).
+ * Created Draft, prefilled from shared Engagement/Client data (FR-17 — no re-typing), with a
+ * per-Tenant `number` assigned atomically at creation (from `tenants.invoice_seq`). **Money is
+ * integer minor units + a `currency` code** (architecture L297 — never float math); `amount_total`
+ * is recomputed server-side, never trusted from the client. `line_items` is JSONB (architecture
+ * L181). Dual-scope RLS like `ship_updates` — the Client read (5.2) rides the engagement clause.
+ */
+export const invoices = pgTable(
+  "invoices",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    number: integer("number").notNull(), // per-Tenant sequence (from tenants.invoice_seq)
+    status: text("status").notNull().default("draft"), // draft | sent | paid (5.2 transitions)
+    // [{ description, quantity, unitAmount(minor units) }] — amounts are integer minor units.
+    lineItems: jsonb("line_items").notNull(),
+    amountTotal: integer("amount_total").notNull(), // minor units; computed server-side
+    currency: text("currency").notNull(), // ISO-4217 (default PHP, per-invoice; Story 5.1)
+    issuedAt: timestamp("issued_at", { withTimezone: true }).notNull().defaultNow(),
+    dueAt: timestamp("due_at", { withTimezone: true }),
+    notes: text("notes"),
+    pdfBlobUrl: text("pdf_blob_url"), // reserved for the branded PDF (Story 5.3)
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Per-Tenant number uniqueness — a hard backstop atop the atomic counter.
+    unique("invoices_tenant_number").on(t.tenantId, t.number),
+    // Tenant-scoped for the Freelancer; engagement-scoped for a Client (5.2) — same dual-scope
+    // shape as ship_updates/engagements.
+    pgPolicy("invoice_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
 export type Engagement = typeof engagements.$inferSelect;
@@ -391,3 +440,4 @@ export type WebhookEvent = typeof webhookEvents.$inferSelect;
 export type RepoConnection = typeof repoConnections.$inferSelect;
 export type GithubInstallation = typeof githubInstallations.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
+export type Invoice = typeof invoices.$inferSelect;

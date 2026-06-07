@@ -10,6 +10,7 @@ import {
   engagements,
   githubInstallations,
   invitations,
+  invoices,
   notifications,
   repoConnections,
   shipUpdates,
@@ -177,6 +178,17 @@ beforeAll(async () => {
   );
   await asTenant(TENANT_B, (tx) =>
     tx.insert(notifications).values({ tenantId: TENANT_B, engagementId: ENG_B1, userId: "client_b", type: "ship_published" }),
+  );
+  // Seed one Invoice per Tenant (Story 5.1), scoped so WITH CHECK is exercised on insert.
+  await asTenant(TENANT_A, (tx) =>
+    tx.insert(invoices).values({
+      tenantId: TENANT_A, engagementId: ENG_A1, number: 1, lineItems: [{ description: "x", quantity: 1, unitAmount: 1000 }], amountTotal: 1000, currency: "PHP",
+    }),
+  );
+  await asTenant(TENANT_B, (tx) =>
+    tx.insert(invoices).values({
+      tenantId: TENANT_B, engagementId: ENG_B1, number: 1, lineItems: [{ description: "y", quantity: 1, unitAmount: 2000 }], amountTotal: 2000, currency: "PHP",
+    }),
   );
 });
 
@@ -530,6 +542,48 @@ describe("NFR-2 isolation — notifications (Story 3.6)", () => {
     const rows = await db.transaction(async (tx) => {
       await tx.execute(sql`set local role soloist_app`);
       return tx.select().from(notifications);
+    });
+    expect(rows).toHaveLength(0);
+  });
+});
+
+describe("NFR-2 isolation — invoices (Story 5.1)", () => {
+  it("(ak) a Freelancer (tenant scope) sees only their own Tenant's invoices", async () => {
+    const rows = await asTenant(TENANT_A, (tx) => tx.select().from(invoices));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].engagementId).toBe(ENG_A1);
+    expect(rows[0].amountTotal).toBe(1000);
+  });
+
+  it("(al) cross-tenant: Tenant B sees only its own invoice", async () => {
+    const rows = await asTenant(TENANT_B, (tx) => tx.select().from(invoices));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].amountTotal).toBe(2000);
+  });
+
+  it("(am) a Client (engagement-scoped to E1) sees only E1's invoice (the 5.2 read path)", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await applyTenantScope(tx, { tenantId: TENANT_A, engagementId: ENG_A1 });
+      return tx.select().from(invoices);
+    });
+    expect(rows).toHaveLength(1); // non-vacuous: the E1 invoice IS visible (not just "no leak")
+    expect(rows.every((r) => r.engagementId === ENG_A1)).toBe(true);
+  });
+
+  it("(an) WITH CHECK blocks an invoice forged for ANOTHER Tenant", async () => {
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(invoices).values({
+          tenantId: TENANT_B, engagementId: ENG_A2, number: 99, lineItems: [], amountTotal: 0, currency: "PHP",
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+
+  it("(ao) invoices fail closed with no scope (soloist_app, no GUCs) → 0 rows", async () => {
+    const rows = await db.transaction(async (tx) => {
+      await tx.execute(sql`set local role soloist_app`);
+      return tx.select().from(invoices);
     });
     expect(rows).toHaveLength(0);
   });
