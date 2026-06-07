@@ -1,4 +1,4 @@
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { db } from "../index";
 import { withTenant, type TenantContext } from "../context";
@@ -102,4 +102,50 @@ export async function listActiveRepoFullNames(ctx: TenantContext): Promise<strin
       .where(ne(repoConnections.status, "disconnected")),
   );
   return rows.map((r) => r.repoFullName);
+}
+
+/** Every connection the reconciliation cron should pull (Story 3.3) — all non-disconnected rows
+ * across ALL Tenants (a SYSTEM read, raw `db`, like the webhook resolve). Each row carries its
+ * `tenant_id`/`engagement_id`, so the cron's candidate insert needs no resolve step. */
+export async function listConnectionsForReconcile(): Promise<
+  {
+    id: string;
+    tenantId: string;
+    engagementId: string;
+    ghInstallationId: string;
+    repoFullName: string;
+    lastPullAt: Date | null;
+  }[]
+> {
+  return db
+    .select({
+      id: repoConnections.id,
+      tenantId: repoConnections.tenantId,
+      engagementId: repoConnections.engagementId,
+      ghInstallationId: repoConnections.ghInstallationId,
+      repoFullName: repoConnections.repoFullName,
+      lastPullAt: repoConnections.lastPullAt,
+    })
+    .from(repoConnections)
+    .where(ne(repoConnections.status, "disconnected"));
+}
+
+/** Mark a successful reconciliation pull (Story 3.3) — `status='connected'`, advance
+ * `last_pull_at`, clear `last_error`. Raw `db` (the cron is a SYSTEM process). The
+ * `status <> 'disconnected'` guard prevents resurrecting a repo a Freelancer disconnected mid-run. */
+export async function markConnectionPulled(connectionId: string): Promise<void> {
+  await db
+    .update(repoConnections)
+    .set({ status: "connected", lastPullAt: sql`now()`, lastError: null })
+    .where(and(eq(repoConnections.id, connectionId), ne(repoConnections.status, "disconnected")));
+}
+
+/** Mark a failed reconciliation pull — `status='error'` + `last_error`, LEAVING `last_pull_at`
+ * stale so the repo card shows it isn't current (Story 3.3 / NFR-4). Raw `db`. The
+ * `status <> 'disconnected'` guard keeps a mid-run disconnect from being overwritten. */
+export async function markConnectionError(connectionId: string, message: string): Promise<void> {
+  await db
+    .update(repoConnections)
+    .set({ status: "error", lastError: message })
+    .where(and(eq(repoConnections.id, connectionId), ne(repoConnections.status, "disconnected")));
 }

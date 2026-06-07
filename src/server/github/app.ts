@@ -18,6 +18,15 @@ export type ConnectableRepo = {
   private: boolean;
 };
 
+/** What the reconciliation cron pulls from a connected repo (Story 3.3) — the recent activity the
+ * mapper turns into candidates. Only qualifying items (merged/open PRs, published releases, the
+ * default-branch head commit) are included. */
+export type PulledActivity = {
+  headCommit?: { sha: string; message: string; branch: string };
+  pulls: { number: number; title: string; merged: boolean; branch: string; headSha: string }[];
+  releases: { tag: string; name: string | null }[];
+};
+
 /** App identity + key — required to reach GitHub at all. */
 export function isGithubConfigured(): boolean {
   return Boolean(env.GITHUB_APP_ID && env.GITHUB_APP_PRIVATE_KEY);
@@ -110,4 +119,85 @@ export async function getUserInstallations(
     id: String(i.id),
     accountLogin: i.account && "login" in i.account ? i.account.login : null,
   }));
+}
+
+/**
+ * Pull a connected repo's recent activity for the reconciliation cron (Story 3.3). Mints a
+ * short-lived installation token and fetches the default-branch head commit, recent merged/open
+ * PRs, and published releases. Each fetch is isolated (a missing scope / 404 on one doesn't lose
+ * the others); a fully-unreachable repo throws to the caller, which marks the connection `error`.
+ */
+export async function pullRecentActivity(
+  installationId: string,
+  repoFullName: string,
+): Promise<PulledActivity> {
+  const out: PulledActivity = { pulls: [], releases: [] };
+  const app = getApp();
+  if (!app || !/^\d+$/.test(installationId)) return out;
+  const [owner, repo] = repoFullName.split("/");
+  if (!owner || !repo) return out;
+  const octokit = await app.getInstallationOctokit(Number(installationId));
+
+  // Probe the repo (existence + default branch). A failure HERE means the repo is gone / the App
+  // lost access — let it THROW so the cron marks the connection `error`, not a false-success empty
+  // pull. (The sub-fetches below are best-effort: a repo with no commits/PRs/releases is normal.)
+  const { data: repoData } = await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
+  const branch = repoData.default_branch;
+
+  // Default-branch head commit → a push-equivalent keyed by its SHA (matches the webhook's `after`).
+  try {
+    const { data: commits } = await octokit.request("GET /repos/{owner}/{repo}/commits", {
+      owner,
+      repo,
+      sha: branch,
+      per_page: 1,
+    });
+    const head = commits[0];
+    if (head) out.headCommit = { sha: head.sha, message: head.commit.message, branch };
+  } catch {
+    /* no commits on the default branch — skip the push signal */
+  }
+
+  // Merged + open PRs (open-but-draft and closed-unmerged are dropped by the mapper's filter).
+  try {
+    const { data: pulls } = await octokit.request("GET /repos/{owner}/{repo}/pulls", {
+      owner,
+      repo,
+      state: "all",
+      sort: "updated",
+      direction: "desc",
+      per_page: 30,
+    });
+    for (const pr of pulls) {
+      const merged = pr.merged_at != null;
+      const openable = pr.state === "open" && !pr.draft;
+      if (merged || openable) {
+        out.pulls.push({
+          number: pr.number,
+          title: pr.title,
+          merged,
+          branch: pr.head.ref,
+          headSha: pr.head.sha,
+        });
+      }
+    }
+  } catch {
+    /* no pull_requests access — skip */
+  }
+
+  // Published (non-draft) releases.
+  try {
+    const { data: releases } = await octokit.request("GET /repos/{owner}/{repo}/releases", {
+      owner,
+      repo,
+      per_page: 10,
+    });
+    for (const rel of releases) {
+      if (!rel.draft && rel.tag_name) out.releases.push({ tag: rel.tag_name, name: rel.name ?? null });
+    }
+  } catch {
+    /* no releases / contents access — skip */
+  }
+
+  return out;
 }

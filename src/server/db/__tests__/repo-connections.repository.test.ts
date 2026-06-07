@@ -19,6 +19,9 @@ import {
   findEngagementForRepo,
   listActiveRepoFullNames,
   listConnections,
+  listConnectionsForReconcile,
+  markConnectionError,
+  markConnectionPulled,
 } from "../repositories/repo-connections.repository";
 import { createEngagement } from "../repositories/engagements.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
@@ -134,6 +137,27 @@ describe("Story 3.2 — repo-connections repository", () => {
     expect(names).toContain("acme/active-list");
     await disconnectRepo(ctxA(), c.id);
     expect(await listActiveRepoFullNames(ctxA())).not.toContain("acme/active-list");
+  });
+
+  it("Story 3.3 reconcile reads/writes: list non-disconnected, mark pulled/error, exclude disconnected", async () => {
+    const c = await connectRepo(ctxA(), {
+      engagementId: ENG_A,
+      ghInstallationId: "rc-1",
+      ghRepoId: "9",
+      repoFullName: "acme/reconcile",
+    });
+    expect((await listConnectionsForReconcile()).find((r) => r.id === c.id)).toBeTruthy();
+
+    await markConnectionError(c.id, "boom");
+    const errored = (await listConnectionsForReconcile()).find((r) => r.id === c.id);
+    expect(errored).toBeTruthy(); // an errored row is still pulled (to retry)
+
+    await markConnectionPulled(c.id);
+    const pulled = (await listConnectionsForReconcile()).find((r) => r.id === c.id);
+    expect(pulled?.lastPullAt).not.toBeNull();
+
+    await disconnectRepo(ctxA(), c.id);
+    expect((await listConnectionsForReconcile()).find((r) => r.id === c.id)).toBeUndefined();
   });
 
   it("NFR-2: a Freelancer can't disconnect another Tenant's connection (RLS → null)", async () => {
