@@ -44,3 +44,13 @@ export const bulkPublishSchema = z.object({
   engagementId: z.uuid(),
 });
 export type BulkPublishInput = z.infer<typeof bulkPublishSchema>;
+
+/** Author a manual Ship Update by hand (Story 3.8) — title required, summary optional, one status.
+ * Becomes a `source='manual'` candidate that flows through the same curation/publish pipeline. */
+export const manualUpdateSchema = z.object({
+  engagementId: z.uuid(),
+  title: z.string().trim().min(1, "A title is required.").max(200, "Keep the title under 200 characters."),
+  summary: z.string().trim().max(2000, "Keep the summary under 2000 characters.").nullable().optional(),
+  statusTag: z.enum(SHIP_STATUS_KEYS),
+});
+export type ManualUpdateInput = z.infer<typeof manualUpdateSchema>;

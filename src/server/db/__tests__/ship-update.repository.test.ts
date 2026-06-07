@@ -290,3 +290,34 @@ describe("Story 3.6 — the publish gate + the client-safe feed read", () => {
     expect("rawMeta" in feed[0]).toBe(false); // the projection NEVER selects raw_meta
   });
 });
+
+describe("Story 3.8 — manual ship updates (createCandidate, source='manual')", () => {
+  it("a manual create inserts a candidate; two manual creates for one engagement BOTH insert (null keys don't collide)", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Manual", clientDisplayName: "Acme" })).id;
+    const a = await createCandidate(ctxA(), {
+      engagementId: eng,
+      statusTag: "shipped",
+      title: "Wrote the proposal",
+      summary: "By hand",
+      source: "manual",
+    });
+    expect(a?.source).toBe("manual");
+    expect(a?.state).toBe("candidate");
+    expect(a?.sourceEventKey).toBeNull();
+
+    // A second manual create (also null source_event_key) must NOT be swallowed by the dedup.
+    const b = await createCandidate(ctxA(), {
+      engagementId: eng,
+      statusTag: "next",
+      title: "Planned the redesign",
+      source: "manual",
+    });
+    expect(b).not.toBeNull();
+    expect(b?.id).not.toBe(a?.id);
+
+    // Both flow through curation: visible in the queue + counted for the dashboard badge.
+    const list = await listCandidates(ctxA(), eng);
+    expect(list.map((r) => r.title).sort()).toEqual(["Planned the redesign", "Wrote the proposal"]);
+    expect((await countCandidatesByEngagement(ctxA())).get(eng)).toBe(2);
+  });
+});
