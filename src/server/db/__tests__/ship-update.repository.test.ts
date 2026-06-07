@@ -15,9 +15,14 @@ vi.mock("../index", () => ({
 }));
 
 import {
+  countCandidatesByEngagement,
   createCandidate,
+  dismissCandidate,
+  dismissCandidates,
   findCandidateBySourceEventKey,
+  listCandidates,
   renderingQualityStat,
+  updateCandidate,
 } from "../repositories/ship-update.repository";
 import { markProcessed, recordDelivery } from "../repositories/webhook-event.repository";
 import { createEngagement } from "../repositories/engagements.repository";
@@ -116,5 +121,97 @@ describe("Story 3.1 — ship-update repository (scoped, idempotent)", () => {
     expect(stat.editedRate).toBeCloseTo(2 / 3);
     // Cross-tenant: B sees none of A's published rows.
     expect((await renderingQualityStat(ctxB())).published).toBe(0);
+  });
+});
+
+describe("Story 3.5 — curation queue (list / edit / dismiss / count)", () => {
+  let ENG_C = "";
+  /** Insert a ship_update directly (bypasses RLS for setup, like the seeds above). */
+  const mk = async (
+    engagementId: string,
+    title: string,
+    opts: { state?: string; createdAt?: Date; tenantId?: string } = {},
+  ): Promise<string> => {
+    const [row] = await h.db!
+      .insert(schema.shipUpdates)
+      .values({
+        tenantId: opts.tenantId ?? TENANT_A,
+        engagementId,
+        statusTag: "in_progress",
+        title,
+        source: "github",
+        state: opts.state ?? "candidate",
+        ...(opts.createdAt ? { createdAt: opts.createdAt } : {}),
+      })
+      .returning();
+    return row.id;
+  };
+
+  beforeAll(async () => {
+    ENG_C = (await createEngagement(ctxA(), { name: "Curate", clientDisplayName: "Acme" })).id;
+  });
+
+  it("listCandidates: only state='candidate' for the engagement, newest-first; RLS-isolated", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "List", clientDisplayName: "Acme" })).id;
+    await mk(eng, "oldest", { createdAt: new Date("2026-01-01T00:00:00Z") });
+    await mk(eng, "newest", { createdAt: new Date("2026-03-01T00:00:00Z") });
+    await mk(eng, "middle", { createdAt: new Date("2026-02-01T00:00:00Z") });
+    await mk(eng, "dismissed", { state: "dismissed", createdAt: new Date("2026-04-01T00:00:00Z") });
+    await mk(eng, "published", { state: "published", createdAt: new Date("2026-05-01T00:00:00Z") });
+
+    const list = await listCandidates(ctxA(), eng);
+    expect(list.map((r) => r.title)).toEqual(["newest", "middle", "oldest"]); // candidates only, desc
+    expect(await listCandidates(ctxB(), eng)).toHaveLength(0); // RLS
+  });
+
+  it("updateCandidate: patches allow-listed title/summary/statusTag + stamps edited_at; state unmoved", async () => {
+    const id = await mk(ENG_C, "raw title");
+    const row = await updateCandidate(ctxA(), id, {
+      title: "Clean title",
+      summary: "Plain detail",
+      statusTag: "shipped",
+    });
+    expect(row?.title).toBe("Clean title");
+    expect(row?.summary).toBe("Plain detail");
+    expect(row?.statusTag).toBe("shipped");
+    expect(row?.state).toBe("candidate");
+    expect(row?.editedAt).not.toBeNull();
+    // a pure status re-tag also stamps edited_at; summary can be cleared to null.
+    const cleared = await updateCandidate(ctxA(), id, { summary: null });
+    expect(cleared?.summary).toBeNull();
+  });
+
+  it("updateCandidate: null for a foreign tenant (RLS) and for a non-candidate row (state guard)", async () => {
+    const id = await mk(ENG_C, "guarded");
+    expect(await updateCandidate(ctxB(), id, { title: "hijack" })).toBeNull(); // RLS
+    const pub = await mk(ENG_C, "already-published", { state: "published" });
+    expect(await updateCandidate(ctxA(), pub, { title: "x" })).toBeNull(); // state guard
+  });
+
+  it("dismissCandidate: candidate → dismissed once, then null on replay / foreign tenant", async () => {
+    const id = await mk(ENG_C, "noise");
+    expect((await dismissCandidate(ctxA(), id))?.state).toBe("dismissed");
+    expect(await dismissCandidate(ctxA(), id)).toBeNull(); // idempotent
+    expect(await dismissCandidate(ctxB(), id)).toBeNull(); // RLS
+  });
+
+  it("dismissCandidates: bulk-dismisses only candidates, reports the count; empty → 0", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Bulk", clientDisplayName: "Acme" })).id;
+    const a = await mk(eng, "a");
+    const b = await mk(eng, "b");
+    const pub = await mk(eng, "pub", { state: "published" });
+    expect(await dismissCandidates(ctxA(), [a, b, pub])).toEqual({ count: 2 }); // pub skipped
+    expect(await dismissCandidates(ctxA(), [])).toEqual({ count: 0 });
+    expect(await listCandidates(ctxA(), eng)).toHaveLength(0);
+  });
+
+  it("countCandidatesByEngagement: groups, ignores dismissed/published, RLS-isolated", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Count", clientDisplayName: "Acme" })).id;
+    await mk(eng, "c1");
+    await mk(eng, "c2");
+    await mk(eng, "d", { state: "dismissed" });
+    await mk(eng, "p", { state: "published" });
+    expect((await countCandidatesByEngagement(ctxA())).get(eng)).toBe(2);
+    expect((await countCandidatesByEngagement(ctxB())).get(eng)).toBeUndefined(); // RLS
   });
 });

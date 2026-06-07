@@ -1,12 +1,36 @@
-import { TabPlaceholder } from "./tab-placeholder";
+import { notFound } from "next/navigation";
+import { Card } from "@/components/ui/card";
+import { isUuid } from "@/lib/uuid";
+import { requireFreelancer } from "@/server/auth/session";
+import { listCandidates } from "@/server/db/repositories/ship-update.repository";
+import { CurationQueue, type CandidateView } from "./curation-queue";
 
-// Ship Feed (curation queue) — the default tab. The shell layout already guarded the
-// engagement, so this is a pure placeholder until Epic 3 builds the curation queue.
-export default function ShipFeedTab() {
-  return (
-    <TabPlaceholder
-      title="Ship Feed"
-      body="Connect a repo to auto-pull updates, or write one by hand. The curation queue arrives in Epic 3."
-    />
-  );
+// Ship Feed = the curation queue (Story 3.5), the default tab. The shell layout already guarded
+// the engagement; this re-guards + reads the candidates (matching repos/page.tsx).
+export default async function ShipFeedTab({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  if (!isUuid(id)) notFound();
+  const ctx = await requireFreelancer();
+
+  // Project to the Client-safe view — title/summary/status/timestamps only, never raw_meta.
+  const candidates: CandidateView[] = (await listCandidates(ctx, id)).map((r) => ({
+    id: r.id,
+    title: r.title,
+    summary: r.summary,
+    statusTag: r.statusTag,
+    createdAt: r.createdAt,
+  }));
+
+  if (candidates.length === 0) {
+    return (
+      <Card className="flex flex-col items-center gap-2 p-12 text-center">
+        <p className="font-medium">All caught up.</p>
+        <p className="max-w-md text-sm text-muted-foreground">
+          New activity from GitHub will appear here.
+        </p>
+      </Card>
+    );
+  }
+
+  return <CurationQueue engagementId={id} candidates={candidates} />;
 }

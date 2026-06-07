@@ -2,6 +2,7 @@ import { desc, eq, ne, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { withTenant, type TenantContext } from "../context";
 import { engagements, type Engagement } from "../schema";
+import { countCandidatesByEngagement } from "./ship-update.repository";
 
 // (Story 3.1's `findSpikeTargetEngagement` shortcut was removed in Story 3.2 — the repo →
 // engagement resolve now lives in repo-connections.repository's `findEngagementForRepo`.)
@@ -62,10 +63,9 @@ export async function listEngagements(
  * candidate count, sorted "needs attention first". */
 export async function listDashboard(ctx: TenantContext): Promise<DashboardEngagement[]> {
   const rows = await listEngagements(ctx); // active only, RLS-scoped, last-activity desc
-  // Candidate-count seam: Epic 3 replaces this `0` with
-  //   COUNT(ship_updates WHERE engagement_id = e.id AND state = 'candidate').
-  // `ship_updates` doesn't exist yet → 0 for all → the badge is absent (the correct now-state).
-  const withCounts = rows.map((e) => ({ ...e, candidateCount: 0 }));
+  // Story 3.5: the real "needs attention" count — one grouped, RLS-scoped query (not N+1).
+  const counts = await countCandidatesByEngagement(ctx);
+  const withCounts = rows.map((e) => ({ ...e, candidateCount: counts.get(e.id) ?? 0 }));
   return withCounts.sort(compareDashboard);
 }
 

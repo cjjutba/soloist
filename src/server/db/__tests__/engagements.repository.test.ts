@@ -164,9 +164,46 @@ describe("Story 2.2 — Dashboard read + sort", () => {
       .where(eq(schema.engagements.id, b.id));
 
     const dash = await listDashboard(ctxA());
-    expect(dash.every((r) => r.candidateCount === 0)).toBe(true); // Epic 3 seam — absent badge
+    expect(dash.every((r) => r.candidateCount === 0)).toBe(true); // no candidates seeded yet
     const ids = dash.map((r) => r.id);
     expect(ids.indexOf(b.id)).toBeLessThan(ids.indexOf(a.id)); // fresher first
     expect(dash.every((r) => r.status !== "archived")).toBe(true);
+  });
+});
+
+describe("Story 3.5 — real candidate-count badge on the dashboard", () => {
+  const seed = (engagementId: string, state: string, n: number) =>
+    h.db!.insert(schema.shipUpdates).values(
+      Array.from({ length: n }, (_, i) => ({
+        tenantId: TENANT_A,
+        engagementId,
+        statusTag: "shipped",
+        title: `c${i}`,
+        source: "github",
+        state,
+      })),
+    );
+
+  it("listDashboard reflects the real count of state='candidate' rows (dismissed/published excluded)", async () => {
+    const e1 = await createEngagement(ctxA(), { name: "Has-3", clientDisplayName: "Client" });
+    const e2 = await createEngagement(ctxA(), { name: "Has-0", clientDisplayName: "Client" });
+    await seed(e1.id, "candidate", 3);
+    await seed(e1.id, "dismissed", 2); // must NOT count
+    await seed(e1.id, "published", 4); // must NOT count
+    // e2 gets only non-candidate rows → count stays 0 (badge absent).
+    await seed(e2.id, "dismissed", 1);
+
+    const dash = await listDashboard(ctxA());
+    const byId = new Map(dash.map((r) => [r.id, r.candidateCount]));
+    expect(byId.get(e1.id)).toBe(3);
+    expect(byId.get(e2.id)).toBe(0);
+  });
+
+  it("NFR-2: Tenant B's dashboard never reflects Tenant A's candidates (RLS-scoped grouped count)", async () => {
+    const eA = await createEngagement(ctxA(), { name: "A-cands", clientDisplayName: "Client" });
+    await seed(eA.id, "candidate", 5);
+    const dashB = await listDashboard(ctxB());
+    expect(dashB.map((r) => r.id)).not.toContain(eA.id);
+    expect(dashB.every((r) => r.candidateCount === 0)).toBe(true);
   });
 });
