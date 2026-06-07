@@ -1,10 +1,13 @@
+import { cache } from "react";
 import { and, eq, isNull, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { withTenant, type TenantContext } from "../context";
 import { tenants, user } from "../schema";
 
-/** Read the caller's own Tenant (RLS + the predicate both scope to ctx.tenantId). */
-export async function getTenant(ctx: TenantContext) {
+/** Read the caller's own Tenant (RLS + the predicate both scope to ctx.tenantId). Request-cached
+ * (Epic 4 prep): the portal's nested layouts each read the Tenant; with the cached session as a
+ * stable `ctx`, this dedups to one read per request. `cache()` no-ops outside a render (tests). */
+export const getTenant = cache((ctx: TenantContext) => {
   return withTenant(ctx, async (tx) => {
     const [row] = await tx
       .select()
@@ -13,7 +16,7 @@ export async function getTenant(ctx: TenantContext) {
       .limit(1);
     return row ?? null;
   });
-}
+});
 
 /** The chosen slug is already taken by another Tenant (caught via the unique index). */
 export class SlugTakenError extends Error {

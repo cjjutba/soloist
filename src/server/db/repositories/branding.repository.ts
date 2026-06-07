@@ -1,9 +1,12 @@
+import { cache } from "react";
 import { eq, sql } from "drizzle-orm";
 import { withTenant, type TenantContext } from "../context";
 import { branding } from "../schema";
 
-/** Read the caller's Tenant branding (null if not set yet). */
-export async function getBranding(ctx: TenantContext) {
+/** Read the caller's Tenant branding (null if not set yet). Request-cached (Epic 4 prep): the
+ * portal's nested layouts each resolve branding; with the cached session as a stable `ctx`, this
+ * dedups to one read per request. `cache()` no-ops outside a render (tests call through fresh). */
+export const getBranding = cache((ctx: TenantContext) => {
   return withTenant(ctx, async (tx) => {
     const [row] = await tx
       .select()
@@ -12,7 +15,7 @@ export async function getBranding(ctx: TenantContext) {
       .limit(1);
     return row ?? null;
   });
-}
+});
 
 /** Create or update the caller's Tenant branding (1:1 with the Tenant). */
 export async function upsertBranding(

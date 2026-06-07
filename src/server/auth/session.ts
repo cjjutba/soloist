@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { headers } from "next/headers";
 import { notFound, redirect } from "next/navigation";
 import { findClientAccessByUserId } from "@/server/db/repositories/client-access.repository";
@@ -14,9 +15,11 @@ import { auth } from "./index";
  *   - authenticated but WRONG role/Tenant   → notFound() (neutral 404; a Client must
  *     never learn the Cockpit's shape, and vice-versa)
  *
- * Not wrapped in React `cache()`: the loader takes no args, so cache() would memoize
- * across unit tests; the per-request getSession lookups are cheap. (A request-scoped
- * dedup can revisit this once it's worth the test ergonomics.)
+ * Wrapped in React `cache()` (Epic 4 prep): a single request renders nested guards (the
+ * portal: outer layout → shell layout → page each call a require* guard), so this dedups
+ * the `auth.api.getSession` + the ClientAccess bootstrap read to ONCE per request. `cache()`
+ * is request-scoped in the App Router and a NO-OP outside a render (unit tests call through
+ * fresh each time), so the per-call mocks in session.test.ts still see distinct results.
  *
  * ⚠️ POSITIONAL GUARD: protection comes from the layouts calling these guards (and the
  * pages self-guarding). There is no middleware backstop, so EVERY future /app/* or
@@ -50,7 +53,7 @@ export type ClientSession = AppSession & {
   engagementId: string;
 };
 
-export async function getAppSession(): Promise<AppSession | null> {
+export const getAppSession = cache(async (): Promise<AppSession | null> => {
   const result = await auth.api.getSession({ headers: await headers() });
   if (!result?.user) return null;
   const u = result.user as {
@@ -80,7 +83,7 @@ export async function getAppSession(): Promise<AppSession | null> {
     };
   }
   return { ...base, tenantId: null, role: null };
-}
+});
 
 /**
  * /app guard: returns the freelancer principal (usable directly as a TenantContext),
