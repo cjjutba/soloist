@@ -16,6 +16,49 @@ import { inngest } from "../client";
  * session): each connection row carries its tenant/engagement, so no resolve is needed. Per-repo
  * isolation: one repo's failure marks only that connection `error` and never aborts the rest.
  */
+/**
+ * Pull ONE connection's recent activity → candidates, and record the outcome on the connection
+ * (Story 3.3; extracted in 3.9 so a freelancer-triggered Retry reuses it verbatim). Idempotent
+ * (dedup via `source_event_key`) and self-contained: on success `markConnectionPulled` (clears
+ * `last_error`, sets `status='connected'`); on ANY failure it CATCHES and `markConnectionError`
+ * with a CONTROLLED message (never the raw Octokit error — its request config can carry the
+ * installation token), which the repo card surfaces. Never throws → one repo can't abort the loop.
+ */
+export async function pullAndRecordConnection(conn: {
+  id: string;
+  tenantId: string;
+  engagementId: string;
+  ghInstallationId: string;
+  repoFullName: string;
+}): Promise<{ ok: boolean; candidates: number }> {
+  try {
+    const activity = await pullRecentActivity(conn.ghInstallationId, conn.repoFullName);
+    let candidates = 0;
+    for (const event of pulledActivityToEvents(conn.repoFullName, activity)) {
+      const summary = heuristicSummarizer.mapEvent(event);
+      const created = await createCandidate(
+        { tenantId: conn.tenantId, userId: "system", role: "freelancer" },
+        {
+          engagementId: conn.engagementId,
+          statusTag: summary.statusTag,
+          title: summary.title,
+          summary: summary.summary,
+          source: "github",
+          sourceEventKey: event.sourceEventKey,
+          rawMeta: event.rawMeta,
+        },
+      );
+      if (created) candidates += 1; // null = deduped (already made by the webhook / a prior run)
+    }
+    await markConnectionPulled(conn.id);
+    return { ok: true, candidates };
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    await markConnectionError(conn.id, typeof status === "number" ? `GitHub returned ${status}` : "Couldn’t reach GitHub");
+    return { ok: false, candidates: 0 };
+  }
+}
+
 export async function reconcileConnectedRepos(): Promise<{
   pulled: number;
   candidates: number;
@@ -27,31 +70,11 @@ export async function reconcileConnectedRepos(): Promise<{
   let errored = 0;
 
   for (const conn of connections) {
-    try {
-      const activity = await pullRecentActivity(conn.ghInstallationId, conn.repoFullName);
-      for (const event of pulledActivityToEvents(conn.repoFullName, activity)) {
-        const summary = heuristicSummarizer.mapEvent(event);
-        const created = await createCandidate(
-          { tenantId: conn.tenantId, userId: "system", role: "freelancer" },
-          {
-            engagementId: conn.engagementId,
-            statusTag: summary.statusTag,
-            title: summary.title,
-            summary: summary.summary,
-            source: "github",
-            sourceEventKey: event.sourceEventKey,
-            rawMeta: event.rawMeta,
-          },
-        );
-        if (created) candidates += 1; // null = deduped (already made by the webhook / a prior run)
-      }
-      await markConnectionPulled(conn.id);
+    const res = await pullAndRecordConnection(conn);
+    if (res.ok) {
       pulled += 1;
-    } catch (err) {
-      // Store a CONTROLLED message (never the raw Octokit error — its request config can carry
-      // the installation token); the repo card surfaces this `last_error`.
-      const status = (err as { status?: number }).status;
-      await markConnectionError(conn.id, typeof status === "number" ? `GitHub returned ${status}` : "Couldn’t reach GitHub");
+      candidates += res.candidates;
+    } else {
       errored += 1;
     }
   }

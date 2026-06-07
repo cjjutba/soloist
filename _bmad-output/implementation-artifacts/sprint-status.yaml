@@ -64,7 +64,7 @@ development_status:
   epic-2-retrospective: done
 
   # ── Epic 3: The Live Ship Feed — GitHub → Curate → Publish (the moat) ──
-  epic-3: in-progress
+  epic-3: done
   3-1-moat-spike-github-app-webhook-one-candidate: done
   3-2-connect-disconnect-github-repositories: done
   3-2-1-per-tenant-github-installation-binding: done
@@ -74,7 +74,7 @@ development_status:
   3-6-publish-the-privacy-gate-minimal-email-on-publish: done
   3-7-client-ship-feed-live-via-polling: done
   3-8-manual-ship-update-fallback: done
-  3-9-github-degraded-error-states: backlog
+  3-9-github-degraded-error-states: done
   epic-3-retrospective: optional
 
   # ── Epic 4: Notifications — the Momentum Loop ──

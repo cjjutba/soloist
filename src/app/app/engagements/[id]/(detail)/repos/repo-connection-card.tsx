@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { DisconnectButton } from "./disconnect-button";
+import { RetryButton } from "./retry-button";
 
 /** Structural shape (avoids importing the schema type, which the data-access ESLint guard
  * blocks for UI files). A `RepoConnection` row is assignable to this. */
@@ -46,11 +47,16 @@ export function RepoConnectionCard({
         ) : null}
       </div>
       {isActive ? (
-        <DisconnectButton
-          engagementId={engagementId}
-          connectionId={connection.id}
-          repoFullName={connection.repoFullName}
-        />
+        <div className="flex shrink-0 items-center gap-2">
+          {connection.status === "error" ? (
+            <RetryButton engagementId={engagementId} connectionId={connection.id} />
+          ) : null}
+          <DisconnectButton
+            engagementId={engagementId}
+            connectionId={connection.id}
+            repoFullName={connection.repoFullName}
+          />
+        </div>
       ) : null}
     </Card>
   );

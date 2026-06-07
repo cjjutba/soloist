@@ -291,6 +291,36 @@ describe("Story 3.6 — the publish gate + the client-safe feed read", () => {
   });
 });
 
+describe("Story 3.9 — NFR-4: a repo-connection error never blocks publish or the feed", () => {
+  it("publish + the published feed work while a connection is in status='error' (different tables)", async () => {
+    const eng = (await createEngagement(ctxA(), { name: "Degraded", clientDisplayName: "Acme" })).id;
+    // A connection in the ERROR state (as the reconcile cron would leave it after a GitHub failure).
+    await h.db!.insert(schema.repoConnections).values({
+      tenantId: TENANT_A,
+      engagementId: eng,
+      ghInstallationId: "inst-x",
+      ghRepoId: "repo-x",
+      repoFullName: "cj/degraded",
+      status: "error",
+      lastError: "GitHub returned 503",
+    });
+    // A candidate exists (e.g. authored manually, or pulled before the failure).
+    const [cand] = await h.db!
+      .insert(schema.shipUpdates)
+      .values({ tenantId: TENANT_A, engagementId: eng, statusTag: "shipped", title: "Done despite GitHub being down", source: "manual", state: "candidate" })
+      .returning();
+
+    // Publishing still works — publishShipUpdate reads ship_updates/engagements, never repo_connections.
+    const published = await publishShipUpdate(ctxA(), cand.id);
+    expect(published?.state).toBe("published");
+
+    // And the Client feed still serves it.
+    const clientCtx = { tenantId: TENANT_A, userId: "client-y", role: "client", engagementId: eng } as const;
+    const feed = await listPublishedUpdates(clientCtx, eng);
+    expect(feed.map((r) => r.title)).toEqual(["Done despite GitHub being down"]);
+  });
+});
+
 describe("Story 3.8 — manual ship updates (createCandidate, source='manual')", () => {
   it("a manual create inserts a candidate; two manual creates for one engagement BOTH insert (null keys don't collide)", async () => {
     const eng = (await createEngagement(ctxA(), { name: "Manual", clientDisplayName: "Acme" })).id;

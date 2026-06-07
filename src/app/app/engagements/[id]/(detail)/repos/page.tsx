@@ -12,6 +12,7 @@ import { isUuid } from "@/lib/uuid";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { ConnectRepoForm } from "./connect-repo-form";
+import { GithubDegradedBanner } from "./github-degraded-banner";
 import { InstallToast } from "./install-toast";
 import { RepoConnectionCard } from "./repo-connection-card";
 
@@ -94,6 +95,9 @@ export default async function ReposTab({ params }: { params: Promise<{ id: strin
           </p>
         </Card>
       ) : null}
+
+      {/* Story 3.9: a non-blocking banner when a connected repo's auto-pull is erroring. */}
+      <GithubDegradedBanner count={active.filter((c) => c.status === "error").length} />
 
       {active.length > 0 ? (
         <div className="flex flex-col gap-3">

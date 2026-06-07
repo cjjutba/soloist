@@ -19,6 +19,20 @@ export async function listConnections(
   );
 }
 
+/** Read one connection by id (Story 3.9 — the Retry path). RLS-scoped → null if it isn't the
+ * caller's, so a freelancer can only Retry their own connection. Carries the fields the Retry
+ * pull needs (gh_installation_id, repo_full_name) + the current status. */
+export async function getConnection(ctx: TenantContext, connectionId: string): Promise<RepoConnection | null> {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(repoConnections)
+      .where(eq(repoConnections.id, connectionId))
+      .limit(1);
+    return row ?? null;
+  });
+}
+
 /** Connect a repo to an Engagement (`status = 'connected'`). The partial unique
  * (`repo_connections_active_repo`, one ACTIVE connection per repo) throws on a 2nd active
  * connect — the action maps Postgres `23505` → "already connected". A previously-disconnected

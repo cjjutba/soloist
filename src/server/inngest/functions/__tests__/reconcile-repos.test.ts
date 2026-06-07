@@ -17,7 +17,7 @@ vi.mock("@/server/db/repositories/ship-update.repository", () => ({ createCandid
 vi.mock("@/server/github/app", () => ({ pullRecentActivity: m.pullRecentActivity }));
 vi.mock("../../client", () => ({ inngest: { createFunction: () => ({}) } }));
 
-import { reconcileConnectedRepos } from "../reconcile-repos";
+import { pullAndRecordConnection, reconcileConnectedRepos } from "../reconcile-repos";
 
 type Conn = {
   id: string;
@@ -89,5 +89,34 @@ describe("Story 3.3 — reconcileConnectedRepos", () => {
     const r = await reconcileConnectedRepos();
     expect(r).toEqual({ pulled: 1, candidates: 0, errored: 0 });
     expect(m.markConnectionPulled).toHaveBeenCalledWith("c1");
+  });
+});
+
+describe("Story 3.9 — pullAndRecordConnection (extracted; reused by the Retry)", () => {
+  it("success → candidate created + markConnectionPulled + {ok:true}", async () => {
+    m.pullRecentActivity.mockResolvedValue({
+      headCommit: { sha: "abc", message: "Ship it", branch: "main" },
+      pulls: [],
+      releases: [],
+    });
+    const res = await pullAndRecordConnection(conn());
+    expect(res).toEqual({ ok: true, candidates: 1 });
+    expect(m.markConnectionPulled).toHaveBeenCalledWith("c1");
+    expect(m.markConnectionError).not.toHaveBeenCalled();
+  });
+
+  it("an HTTP failure → markConnectionError with the controlled status message + {ok:false}", async () => {
+    m.pullRecentActivity.mockRejectedValue(Object.assign(new Error("Not Found"), { status: 404 }));
+    const res = await pullAndRecordConnection(conn());
+    expect(res).toEqual({ ok: false, candidates: 0 });
+    expect(m.markConnectionError).toHaveBeenCalledWith("c1", "GitHub returned 404");
+    expect(m.markConnectionPulled).not.toHaveBeenCalled();
+  });
+
+  it("a non-HTTP throw → the generic 'Couldn’t reach GitHub' message (never the raw error)", async () => {
+    m.pullRecentActivity.mockRejectedValue(new Error("ECONNRESET socket hang up"));
+    const res = await pullAndRecordConnection(conn());
+    expect(res.ok).toBe(false);
+    expect(m.markConnectionError).toHaveBeenCalledWith("c1", "Couldn’t reach GitHub");
   });
 });

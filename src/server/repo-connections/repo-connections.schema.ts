@@ -16,3 +16,10 @@ export const disconnectRepoSchema = z.object({
   connectionId: z.uuid(),
 });
 export type DisconnectRepoInput = z.infer<typeof disconnectRepoSchema>;
+
+/** Retry payload (Story 3.9 — re-run a failed connection's pull). */
+export const retryConnectionSchema = z.object({
+  engagementId: z.uuid(),
+  connectionId: z.uuid(),
+});
+export type RetryConnectionInput = z.infer<typeof retryConnectionSchema>;

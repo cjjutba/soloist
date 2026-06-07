@@ -17,6 +17,7 @@ import {
   connectRepo,
   disconnectRepo,
   findEngagementForRepo,
+  getConnection,
   listActiveRepoFullNames,
   listConnections,
   listConnectionsForReconcile,
@@ -171,5 +172,22 @@ describe("Story 3.2 — repo-connections repository", () => {
     expect(await disconnectRepo(ctxA(), bConn.id)).toBeNull();
     // And A can't see it.
     expect((await listConnections(ctxA(), ENG_B)).length).toBe(0);
+  });
+});
+
+describe("Story 3.9 — getConnection (the Retry read) is RLS-scoped", () => {
+  it("returns the row for the owner, but NULL for another Tenant (no cross-tenant Retry by id)", async () => {
+    const a = await connectRepo(ctxA(), {
+      engagementId: ENG_A,
+      ghInstallationId: "inst-rt",
+      ghRepoId: "rt",
+      repoFullName: "alpha/retry-target",
+    });
+    // The owner reads it (carries the fields the Retry pull needs).
+    const own = await getConnection(ctxA(), a.id);
+    expect(own?.repoFullName).toBe("alpha/retry-target");
+    expect(own?.ghInstallationId).toBe("inst-rt");
+    // Tenant B passing A's connectionId → RLS returns 0 rows → null (can't Retry A's connection).
+    expect(await getConnection(ctxB(), a.id)).toBeNull();
   });
 });

@@ -4,9 +4,18 @@ import { revalidatePath } from "next/cache";
 import { requireFreelancer } from "@/server/auth/session";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
 import { listInstallationIds } from "@/server/db/repositories/github-installations.repository";
-import { connectRepo, disconnectRepo } from "@/server/db/repositories/repo-connections.repository";
+import {
+  connectRepo,
+  disconnectRepo,
+  getConnection,
+} from "@/server/db/repositories/repo-connections.repository";
 import { listReposForInstallations } from "@/server/github/app";
-import { connectRepoSchema, disconnectRepoSchema } from "./repo-connections.schema";
+import { pullAndRecordConnection } from "@/server/inngest/functions/reconcile-repos";
+import {
+  connectRepoSchema,
+  disconnectRepoSchema,
+  retryConnectionSchema,
+} from "./repo-connections.schema";
 
 export type RepoConnectionResult = { ok: true } | { ok: false; error: string };
 
@@ -84,6 +93,49 @@ export async function disconnectRepoAction(input: {
   } catch (err) {
     console.error("[repo-connections] disconnectRepoAction failed:", err);
     return { ok: false, error: "Couldn't disconnect that repo. Please try again." };
+  }
+}
+
+/** Retry a failed connection's pull immediately (Story 3.9). Re-runs the SAME idempotent pull the
+ * reconcile cron does (dedup via `source_event_key`) — on success the card returns to `connected`
+ * (`last_error` cleared); on a continued failure it stays `error` with the message refreshed.
+ * Never touches publish/feed (they don't read `repo_connections`), so this is purely about
+ * resuming auto-updates. The RLS-scoped `getConnection` means a freelancer can only Retry their own. */
+export async function retryConnectionAction(input: {
+  engagementId: string;
+  connectionId: string;
+}): Promise<RepoConnectionResult> {
+  const ctx = await requireFreelancer();
+
+  const parsed = retryConnectionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+  }
+  const { connectionId } = parsed.data;
+
+  try {
+    const conn = await getConnection(ctx, connectionId);
+    if (!conn || conn.status === "disconnected") {
+      return { ok: false, error: "That connection is gone." };
+    }
+    const res = await pullAndRecordConnection({
+      id: conn.id,
+      tenantId: conn.tenantId,
+      engagementId: conn.engagementId,
+      ghInstallationId: conn.ghInstallationId,
+      repoFullName: conn.repoFullName,
+    });
+    // Revalidate the connection's OWN engagement page (not the request's), so the right card refreshes.
+    revalidatePath(reposPath(conn.engagementId));
+    return res.ok
+      ? { ok: true }
+      : { ok: false, error: "Still couldn't reach GitHub — auto-updates will keep retrying." };
+  } catch (err) {
+    console.error(
+      "[repo-connections] retryConnectionAction failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return { ok: false, error: "Couldn't retry that connection. Please try again." };
   }
 }
 

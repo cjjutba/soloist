@@ -8,8 +8,10 @@ const m = vi.hoisted(() => ({
   getEngagement: vi.fn(),
   connectRepo: vi.fn(),
   disconnectRepo: vi.fn(),
+  getConnection: vi.fn(),
   listInstallationIds: vi.fn(),
   listReposForInstallations: vi.fn(),
+  pullAndRecordConnection: vi.fn(),
 }));
 
 vi.mock("@/server/auth/session", () => ({ requireFreelancer: () => Promise.resolve(m.ctx) }));
@@ -20,11 +22,15 @@ vi.mock("@/server/db/repositories/github-installations.repository", () => ({
 vi.mock("@/server/db/repositories/repo-connections.repository", () => ({
   connectRepo: m.connectRepo,
   disconnectRepo: m.disconnectRepo,
+  getConnection: m.getConnection,
 }));
 vi.mock("@/server/github/app", () => ({ listReposForInstallations: m.listReposForInstallations }));
+vi.mock("@/server/inngest/functions/reconcile-repos", () => ({
+  pullAndRecordConnection: m.pullAndRecordConnection,
+}));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { connectRepoAction, disconnectRepoAction } from "../repo-connections.actions";
+import { connectRepoAction, disconnectRepoAction, retryConnectionAction } from "../repo-connections.actions";
 
 const REPO = { installationId: "555", repoId: "100", fullName: "cjjutba/soloist", private: false };
 
@@ -36,6 +42,15 @@ beforeEach(() => {
   m.listReposForInstallations.mockResolvedValue([REPO]);
   m.connectRepo.mockResolvedValue({ id: CONN });
   m.disconnectRepo.mockResolvedValue({ id: CONN, status: "disconnected" });
+  m.getConnection.mockResolvedValue({
+    id: CONN,
+    tenantId: "t1",
+    engagementId: ENG,
+    ghInstallationId: "555",
+    repoFullName: "cjjutba/soloist",
+    status: "error",
+  });
+  m.pullAndRecordConnection.mockResolvedValue({ ok: true, candidates: 1 });
 });
 
 describe("Story 3.2 — connect/disconnect actions", () => {
@@ -86,5 +101,45 @@ describe("Story 3.2 — connect/disconnect actions", () => {
     m.disconnectRepo.mockResolvedValue(null);
     const res = await disconnectRepoAction({ engagementId: ENG, connectionId: CONN });
     expect(res).toEqual({ ok: false, error: "That connection no longer exists." });
+  });
+});
+
+describe("Story 3.9 — retryConnectionAction", () => {
+  it("re-runs the pull for the caller's connection; success → ok", async () => {
+    const res = await retryConnectionAction({ engagementId: ENG, connectionId: CONN });
+    expect(res).toEqual({ ok: true });
+    expect(m.pullAndRecordConnection).toHaveBeenCalledWith({
+      id: CONN,
+      tenantId: "t1",
+      engagementId: ENG,
+      ghInstallationId: "555",
+      repoFullName: "cjjutba/soloist",
+    });
+  });
+
+  it("a continued failure → a friendly keep-retrying message (still not blocking anything)", async () => {
+    m.pullAndRecordConnection.mockResolvedValue({ ok: false, candidates: 0 });
+    const res = await retryConnectionAction({ engagementId: ENG, connectionId: CONN });
+    expect(res).toEqual({ ok: false, error: "Still couldn't reach GitHub — auto-updates will keep retrying." });
+  });
+
+  it("a foreign/gone connection (null) → error, no pull", async () => {
+    m.getConnection.mockResolvedValue(null);
+    const res = await retryConnectionAction({ engagementId: ENG, connectionId: CONN });
+    expect(res).toEqual({ ok: false, error: "That connection is gone." });
+    expect(m.pullAndRecordConnection).not.toHaveBeenCalled();
+  });
+
+  it("a disconnected connection → error, no pull", async () => {
+    m.getConnection.mockResolvedValue({ id: CONN, status: "disconnected" });
+    const res = await retryConnectionAction({ engagementId: ENG, connectionId: CONN });
+    expect(res.ok).toBe(false);
+    expect(m.pullAndRecordConnection).not.toHaveBeenCalled();
+  });
+
+  it("non-uuid input → validation error, no work", async () => {
+    const res = await retryConnectionAction({ engagementId: "nope", connectionId: CONN });
+    expect(res.ok).toBe(false);
+    expect(m.getConnection).not.toHaveBeenCalled();
   });
 });
