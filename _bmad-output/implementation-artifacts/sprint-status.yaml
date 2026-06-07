@@ -75,7 +75,7 @@ development_status:
   3-7-client-ship-feed-live-via-polling: done
   3-8-manual-ship-update-fallback: done
   3-9-github-degraded-error-states: done
-  epic-3-retrospective: optional
+  epic-3-retrospective: done
 
   # ── Epic 4: Notifications — the Momentum Loop ──
   epic-4: backlog
