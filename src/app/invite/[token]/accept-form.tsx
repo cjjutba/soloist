@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { acceptInviteAction } from "@/server/auth/accept-invite.actions";
 
 const FormSchema = z.object({
@@ -55,9 +55,8 @@ export function AcceptForm({ token }: { token: string }) {
         hint="At least 8 characters."
         error={errors.password?.message}
       >
-        <Input
+        <PasswordInput
           id="password"
-          type="password"
           autoComplete="new-password"
           aria-invalid={!!errors.password}
           {...register("password")}

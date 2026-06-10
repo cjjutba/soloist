@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { validateSlug } from "@/lib/slug";
 import { signUpFreelancer } from "./actions";
 
@@ -113,9 +114,8 @@ export function SignUpForm() {
             />
           </Field>
           <Field label="Password" htmlFor="password" error={errors.password?.message}>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="new-password"
               aria-invalid={!!errors.password}
               {...register("password")}
