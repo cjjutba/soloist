@@ -78,7 +78,7 @@ development_status:
   epic-3-retrospective: done
 
   # ── Epic 4: Notifications — the Momentum Loop ──
-  epic-4: in-progress
+  epic-4: done
   4-1-in-app-notification-center: done
   4-2-toast-on-publish-when-active: done
   4-3-polished-branded-email-templates-email-accessibility: done
