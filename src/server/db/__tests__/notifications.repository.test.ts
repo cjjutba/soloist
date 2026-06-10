@@ -22,6 +22,7 @@ import {
   markNotificationsRead,
 } from "../repositories/notifications.repository";
 import { createEngagement } from "../repositories/engagements.repository";
+import { createInvoice } from "../repositories/invoices.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
 
 let TENANT_A = "";
@@ -194,5 +195,49 @@ describe("Story 4.1 — notification center reads + mark-read", () => {
   it("NFR-2: Tenant B sees/marks none of Tenant A's notifications (RLS)", async () => {
     expect(await listNotifications(clientCtxB())).toHaveLength(0);
     expect(await markNotificationsRead(clientCtxB(), [N_READ])).toEqual({ count: 0 });
+  });
+});
+
+describe("Story 5.2 — invoice notifications (invoice_id + dedup + projection)", () => {
+  let ENG_I = "";
+  let INV = "";
+  let INV_NUM = 0;
+  const clientI = (): TenantContext => ({ tenantId: TENANT_A, userId: "client-i", role: "client", engagementId: ENG_I });
+
+  beforeAll(async () => {
+    await h.db!.insert(user).values({ id: "client-i", name: "Client I", email: "client-i@example.com" });
+    ENG_I = (await createEngagement(sysA(), { name: "Inv", clientDisplayName: "Acme I" })).id;
+    const inv = await createInvoice(sysA(), {
+      engagementId: ENG_I,
+      lineItems: [{ description: "Build", quantity: 1, unitAmount: 50000 }],
+      currency: "PHP",
+    });
+    INV = inv.id;
+    INV_NUM = inv.number;
+    // A ship_published notification on the SAME engagement — proves the projection nulls cleanly.
+    const [su] = await h.db!
+      .insert(schema.shipUpdates)
+      .values({ tenantId: TENANT_A, engagementId: ENG_I, statusTag: "shipped", title: "Shipped X", source: "github", state: "published" })
+      .returning();
+    await createNotification(sysA(), { engagementId: ENG_I, userId: "client-i", type: "ship_published", shipUpdateId: su.id });
+  });
+
+  it("createNotification with invoiceId inserts; a second identical (recipient, invoice) → null (the invoice dedup)", async () => {
+    const first = await createNotification(sysA(), { engagementId: ENG_I, userId: "client-i", type: "invoice_sent", invoiceId: INV });
+    expect(first?.type).toBe("invoice_sent");
+    expect(first?.invoiceId).toBe(INV);
+    const dup = await createNotification(sysA(), { engagementId: ENG_I, userId: "client-i", type: "invoice_sent", invoiceId: INV });
+    expect(dup).toBeNull(); // notifications_invoice_dedup
+  });
+
+  it("listNotifications projects invoiceId + invoiceNumber for the invoice row, null for the ship row", async () => {
+    const list = await listNotifications(clientI());
+    const inv = list.find((r) => r.type === "invoice_sent");
+    expect(inv?.invoiceId).toBe(INV);
+    expect(inv?.invoiceNumber).toBe(INV_NUM);
+    expect(inv?.title).toBeNull(); // no ship_update joined for an invoice row
+    const ship = list.find((r) => r.type === "ship_published");
+    expect(ship?.invoiceId).toBeNull();
+    expect(ship?.invoiceNumber).toBeNull();
   });
 });

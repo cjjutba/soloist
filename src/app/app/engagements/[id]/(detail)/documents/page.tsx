@@ -7,7 +7,7 @@ import { getEngagement } from "@/server/db/repositories/engagements.repository";
 import { listInvoices } from "@/server/db/repositories/invoices.repository";
 import { formatMoney } from "@/server/doc-engine/money";
 import { InvoiceBuilder } from "./invoice-builder";
-import { InvoiceStatusChip } from "./invoice-document";
+import { InvoiceStatusChip } from "@/components/invoice/invoice-document";
 
 function fmtDate(d: Date): string {
   return d.toISOString().slice(0, 10); // YYYY-MM-DD (stable in RSC, locale-agnostic)

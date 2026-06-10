@@ -1,11 +1,12 @@
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { db } from "../index";
 import { withTenant, type TenantContext } from "../context";
-import { branding, engagements, notifications, shipUpdates, tenants } from "../schema";
+import { branding, engagements, invoices, notifications, shipUpdates, tenants } from "../schema";
 
-/** Create an in-app notification (Story 3.6 fan-out). `tenant_id` is stamped from ctx (the
- * system/tenant scope), never input. **Idempotent** via the `notifications_ship_dedup` partial
- * unique → a fan-out retry for the same (recipient, ship_update) returns null (no second row). */
+/** Create an in-app notification (Story 3.6 ship fan-out / Story 5.2 invoice fan-out). `tenant_id`
+ * is stamped from ctx (the system/tenant scope), never input. **Idempotent** via the source-keyed
+ * partial uniques → a fan-out retry for the same (recipient, ship_update) OR (recipient, invoice)
+ * returns null (no second row). */
 export async function createNotification(
   ctx: TenantContext,
   input: {
@@ -13,6 +14,7 @@ export async function createNotification(
     userId: string;
     type: string;
     shipUpdateId?: string | null;
+    invoiceId?: string | null;
   },
 ) {
   return withTenant(ctx, async (tx) => {
@@ -24,10 +26,12 @@ export async function createNotification(
         userId: input.userId,
         type: input.type,
         shipUpdateId: input.shipUpdateId ?? null,
+        invoiceId: input.invoiceId ?? null,
       })
-      // Bare (no target) — the only unique on the table is `notifications_ship_dedup`, so this can
-      // only fire on the intended (user_id, ship_update_id) dedup. If a SECOND unique is ever added,
-      // pin an explicit target here so an unrelated conflict can't silently drop a notification.
+      // Bare (no target): the only uniques are the two DISJOINT dedup partials (`…_ship_dedup`,
+      // `…_invoice_dedup`) — a row carries at most one source id, so a conflict can only ever be the
+      // intended (recipient, ship_update) or (recipient, invoice) dedup. If a NON-dedup unique is
+      // ever added, pin an explicit target here so an unrelated conflict can't silently drop a row.
       .onConflictDoNothing()
       .returning();
     return row ?? null; // null = already notified (dedup)
@@ -38,7 +42,8 @@ export async function createNotification(
  * the linked ship_update's title/status. **`user_id = ctx.userId`** is the load-bearing recipient
  * scope — the `notification_scope` RLS confines reads to the Tenant+Engagement, but a notification
  * carries a recipient, so a Client must see only their own (not a future Freelancer row on the same
- * engagement). LEFT JOIN ship_updates (title/status may be null for non-`ship_published` types). */
+ * engagement). LEFT JOIN ship_updates (title/status null for non-ship types) + LEFT JOIN invoices
+ * (number null for non-invoice types) — the center derives each row's href/label from the type. */
 export async function listNotifications(ctx: TenantContext) {
   return withTenant(ctx, (tx) =>
     tx
@@ -50,9 +55,12 @@ export async function listNotifications(ctx: TenantContext) {
         shipUpdateId: notifications.shipUpdateId,
         title: shipUpdates.title,
         statusTag: shipUpdates.statusTag,
+        invoiceId: notifications.invoiceId,
+        invoiceNumber: invoices.number,
       })
       .from(notifications)
       .leftJoin(shipUpdates, eq(shipUpdates.id, notifications.shipUpdateId))
+      .leftJoin(invoices, eq(invoices.id, notifications.invoiceId))
       .where(eq(notifications.userId, ctx.userId))
       .orderBy(desc(notifications.createdAt)),
   );

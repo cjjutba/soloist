@@ -1,0 +1,3 @@
+ALTER TABLE "notifications" ADD COLUMN "invoice_id" uuid;--> statement-breakpoint
+ALTER TABLE "notifications" ADD CONSTRAINT "notifications_invoice_id_invoices_id_fk" FOREIGN KEY ("invoice_id") REFERENCES "public"."invoices"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "notifications_invoice_dedup" ON "notifications" USING btree ("user_id","invoice_id") WHERE invoice_id IS NOT NULL;

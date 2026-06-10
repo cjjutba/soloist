@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { SHIP_STATUS, toShipStatus } from "@/components/ui/ship-status";
-import { selectToasts, type NotificationRow } from "./notifications";
+import { notificationPresentation, selectToasts, type NotificationRow } from "./notifications";
 
 /**
  * Toast on publish WHILE ACTIVE (Story 4.2) — a render-null island mounted portal-wide. Polls the
@@ -53,11 +53,12 @@ export function NotificationToaster() {
     resync.current = false;
     // selectToasts already suppresses a large batch (the anti-burst threshold), so this never storms.
     for (const n of toasts) {
+      const { href, label } = notificationPresentation(n); // one source of truth (href + base label)
       const s = n.statusTag ? SHIP_STATUS[toShipStatus(n.statusTag)] : null;
-      const label = s ? `${s.emoji} ${n.title ?? "New update"}` : (n.title ?? "New update");
-      toast(label, {
-        description: "New update in your feed",
-        action: { label: "View", onClick: () => router.push("/portal") },
+      const isInvoice = n.type === "invoice_sent";
+      toast(s ? `${s.emoji} ${label}` : label, {
+        description: isInvoice ? "New invoice in your documents" : "New update in your feed",
+        action: { label: "View", onClick: () => router.push(href) },
       });
     }
   }, [data, router]);

@@ -1,8 +1,9 @@
-import { and, desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
 import { computeAmountTotal } from "@/server/doc-engine/money";
 import type { InvoiceLineItem } from "@/server/doc-engine/invoice.schema";
+import { db } from "../index";
 import { withTenant, type TenantContext } from "../context";
-import { invoices, tenants } from "../schema";
+import { branding, engagements, invoices, tenants } from "../schema";
 
 export type { Invoice } from "../schema"; // re-exported so UI can type a full invoice row without importing the schema
 
@@ -50,29 +51,123 @@ export async function createInvoice(ctx: TenantContext, input: CreateInvoiceInpu
   });
 }
 
-/** The Engagement's invoices, newest (highest number) first — RLS-scoped + engagement-filtered. */
+/** The list projection shared by the Freelancer + Client invoice lists (omits line_items/tenant_id). */
+const invoiceListColumns = {
+  id: invoices.id,
+  number: invoices.number,
+  status: invoices.status,
+  amountTotal: invoices.amountTotal,
+  currency: invoices.currency,
+  issuedAt: invoices.issuedAt,
+  dueAt: invoices.dueAt,
+} as const;
+
+/** The Engagement's invoices, newest (highest number) first — RLS-scoped + engagement-filtered.
+ * The Freelancer (Cockpit) list: ALL statuses (a draft is theirs to see). */
 export async function listInvoices(ctx: TenantContext, engagementId: string) {
   return withTenant(ctx, (tx) =>
     tx
-      .select({
-        id: invoices.id,
-        number: invoices.number,
-        status: invoices.status,
-        amountTotal: invoices.amountTotal,
-        currency: invoices.currency,
-        issuedAt: invoices.issuedAt,
-        dueAt: invoices.dueAt,
-      })
+      .select(invoiceListColumns)
       .from(invoices)
-      .where(and(eq(invoices.engagementId, engagementId)))
+      .where(eq(invoices.engagementId, engagementId))
       .orderBy(desc(invoices.number)),
   );
 }
 
-/** A single invoice (full row) — RLS-scoped; null if not the caller's. */
+/** The Client (portal) invoice list (Story 5.2) — **sent/paid ONLY**, newest-first. A Draft is
+ * Freelancer-only until sent, so the status gate is the privacy boundary HERE (not just the UI),
+ * like ship_updates' published-only Client read. RLS already scopes the engagement. */
+export async function listClientInvoices(ctx: TenantContext, engagementId: string) {
+  return withTenant(ctx, (tx) =>
+    tx
+      .select(invoiceListColumns)
+      .from(invoices)
+      .where(and(eq(invoices.engagementId, engagementId), inArray(invoices.status, ["sent", "paid"])))
+      .orderBy(desc(invoices.number)),
+  );
+}
+
+/** A single invoice (full row) — RLS-scoped; null if not the caller's. The Freelancer view read. */
 export async function getInvoice(ctx: TenantContext, id: string) {
   return withTenant(ctx, async (tx) => {
     const [row] = await tx.select().from(invoices).where(eq(invoices.id, id)).limit(1);
     return row ?? null;
   });
+}
+
+/** A single invoice for the Client portal view (Story 5.2) — full row, but **null for a Draft**
+ * (never leaks to the Client) or not the caller's. RLS-scoped; the `status <> 'draft'` gate is the
+ * draft exclusion (defense-in-depth even if the page forgets to guard). */
+export async function getClientInvoice(ctx: TenantContext, id: string) {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .select()
+      .from(invoices)
+      .where(and(eq(invoices.id, id), ne(invoices.status, "draft")))
+      .limit(1);
+    return row ?? null;
+  });
+}
+
+/**
+ * Transition a Draft → Sent (Story 5.2), atomically + RLS-scoped. The `status='draft'` guard in the
+ * WHERE is the concurrency boundary: only a real draft→sent transition returns a row, so the action
+ * fires EXACTLY ONE `invoice.sent` even under a double-send/concurrent race (no read-then-write gap).
+ * Returns null if already sent/paid or not the caller's — the action then emits nothing.
+ */
+export async function markInvoiceSent(ctx: TenantContext, id: string) {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .update(invoices)
+      .set({ status: "sent" })
+      .where(and(eq(invoices.id, id), eq(invoices.status, "draft")))
+      .returning();
+    return row ?? null;
+  });
+}
+
+/**
+ * Transition a Sent → Paid (Story 5.2) — the manual, out-of-band status flip. The `status='sent'`
+ * guard means a Draft can NEVER skip straight to Paid (Draft→Sent→Paid only) and a re-mark is a
+ * no-op. RLS-scoped; null if not sent/not the caller's. No event/email (Paid is private bookkeeping).
+ */
+export async function markInvoicePaid(ctx: TenantContext, id: string) {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .update(invoices)
+      .set({ status: "paid" })
+      .where(and(eq(invoices.id, id), eq(invoices.status, "sent")))
+      .returning();
+    return row ?? null;
+  });
+}
+
+/**
+ * Everything the `invoice.sent` email needs, in one raw (system) read — the Inngest fan-out has no
+ * session (mirror `loadShipPublishedContext`). Keyed on the TRUSTED event's `invoiceId`, never
+ * request input. Returns null if the invoice is gone; `logoUrl`/`accentHex` are null when the Tenant
+ * set no branding (the email falls back to the tenant name / default accent).
+ */
+export async function loadInvoiceSentContext(invoiceId: string) {
+  const [row] = await db
+    .select({
+      number: invoices.number,
+      amountTotal: invoices.amountTotal,
+      currency: invoices.currency,
+      status: invoices.status,
+      dueAt: invoices.dueAt,
+      engagementId: invoices.engagementId,
+      tenantId: invoices.tenantId,
+      clientDisplayName: engagements.clientDisplayName,
+      tenantName: tenants.name,
+      logoUrl: branding.logoBlobUrl,
+      accentHex: branding.accentHex,
+    })
+    .from(invoices)
+    .innerJoin(engagements, eq(engagements.id, invoices.engagementId))
+    .innerJoin(tenants, eq(tenants.id, invoices.tenantId))
+    .leftJoin(branding, eq(branding.tenantId, invoices.tenantId))
+    .where(eq(invoices.id, invoiceId))
+    .limit(1);
+  return row ?? null;
 }

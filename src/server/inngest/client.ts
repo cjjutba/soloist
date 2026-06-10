@@ -20,3 +20,11 @@ export type ShipPublished = {
   engagementId: string;
   tenantId: string;
 };
+
+/** The payload for `invoice.sent` (Story 5.2) — minimal ids; the fan-out re-reads the invoice +
+ * email data fresh (never trusts event-carried content), same pattern as `ship/update.published`. */
+export type InvoiceSent = {
+  invoiceId: string;
+  engagementId: string;
+  tenantId: string;
+};

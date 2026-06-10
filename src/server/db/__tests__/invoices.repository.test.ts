@@ -13,7 +13,16 @@ vi.mock("../index", () => ({
   },
 }));
 
-import { createInvoice, getInvoice, listInvoices } from "../repositories/invoices.repository";
+import {
+  createInvoice,
+  getClientInvoice,
+  getInvoice,
+  listClientInvoices,
+  listInvoices,
+  loadInvoiceSentContext,
+  markInvoicePaid,
+  markInvoiceSent,
+} from "../repositories/invoices.repository";
 import { createEngagement } from "../repositories/engagements.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
 
@@ -90,5 +99,55 @@ describe("Story 5.1 — invoices repository", () => {
     const [aInvoice] = await listInvoices(ctxA(), ENG_A);
     expect(await getInvoice(ctxA(), aInvoice.id)).not.toBeNull(); // own → visible
     expect(await getInvoice(ctxB(), aInvoice.id)).toBeNull(); // foreign tenant → RLS null
+  });
+});
+
+describe("Story 5.2 — send, manual status, and the Client (draft-excluding) reads", () => {
+  let invId = ""; // ENG_A's invoice #1 (draft from the 5.1 block) — transitions draft→sent→paid here
+  // A Client ctx (engagement-scoped) — repo reads key RLS off the ctx GUCs, no client_access needed.
+  const clientA = (): TenantContext => ({ tenantId: TENANT_A, userId: "client_a", role: "client", engagementId: ENG_A });
+  const clientA2 = (): TenantContext => ({ tenantId: TENANT_A, userId: "client_a2", role: "client", engagementId: ENG_A2 });
+
+  beforeAll(async () => {
+    invId = (await listInvoices(ctxA(), ENG_A))[0].id;
+  });
+
+  it("markInvoiceSent: draft → sent returns the row; a re-send → null (the atomic guard fires one event)", async () => {
+    const sent = await markInvoiceSent(ctxA(), invId);
+    expect(sent?.status).toBe("sent");
+    expect(await markInvoiceSent(ctxA(), invId)).toBeNull(); // already sent → no second transition/event
+  });
+
+  it("markInvoicePaid: a Draft can NOT skip to Paid; a Sent → Paid", async () => {
+    const draft = (await listInvoices(ctxA(), ENG_A2))[0];
+    expect(draft.status).toBe("draft");
+    expect(await markInvoicePaid(ctxA(), draft.id)).toBeNull(); // Draft→Sent→Paid only (no skip)
+    const paid = await markInvoicePaid(ctxA(), invId); // invId is 'sent' from the prior test
+    expect(paid?.status).toBe("paid");
+  });
+
+  it("listClientInvoices excludes drafts (sent/paid only); getClientInvoice is null for a Draft", async () => {
+    // ENG_A's invoice is now 'paid' → in the Client list; ENG_A2's is still 'draft' → never shown.
+    const clientList = await listClientInvoices(clientA(), ENG_A);
+    expect(clientList).toHaveLength(1);
+    expect(clientList[0].status).toBe("paid");
+
+    const draft = (await listInvoices(ctxA(), ENG_A2))[0];
+    expect(await getClientInvoice(clientA2(), draft.id)).toBeNull(); // a Draft never leaks to the Client
+    expect((await getClientInvoice(clientA(), invId))?.id).toBe(invId); // the paid invoice IS returned
+  });
+
+  it("loadInvoiceSentContext joins the email data (number/amount/currency/client/tenant; branding optional)", async () => {
+    const ctx = await loadInvoiceSentContext(invId);
+    expect(ctx).toMatchObject({
+      number: 1,
+      currency: "PHP",
+      engagementId: ENG_A,
+      tenantId: TENANT_A,
+      clientDisplayName: "Acme",
+      tenantName: "Alpha",
+    });
+    expect(ctx?.amountTotal).toBe(2 * 5000 + 250); // the 5.1-seeded line items
+    expect(ctx?.logoUrl).toBeNull(); // no branding for Alpha → the email falls back
   });
 });

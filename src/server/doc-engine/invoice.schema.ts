@@ -39,3 +39,13 @@ export const createInvoiceSchema = z
 export type CreateInvoiceData = z.infer<typeof createInvoiceSchema>;
 /** A line item as stored/created — `unitAmount` is integer minor units. */
 export type InvoiceLineItem = z.infer<typeof lineItemSchema>;
+
+/** Send / mark-paid input (Story 5.2). `engagementId` is the URL-tamper cross-check (the action
+ * verifies `invoice.engagementId === engagementId` after the RLS-scoped read) AND the revalidate
+ * target. Both status actions share this shape — the transition itself is a guarded UPDATE. */
+export const invoiceActionSchema = z.object({
+  invoiceId: z.uuid(),
+  engagementId: z.uuid(),
+});
+
+export type InvoiceActionData = z.infer<typeof invoiceActionSchema>;
