@@ -1,6 +1,7 @@
-/** A Client notification as the center/bell see it — the joined projection (Story 4.1), with
+/** A Client notification as the center/bell see it — the joined projection (Story 4.1/5.2), with
  * `readAt`/`createdAt` as ISO strings (they cross the wire via `Response.json` + the RSC seed).
- * `title`/`statusTag` come from the linked ship_update (null for non-`ship_published` types). */
+ * `title`/`statusTag` come from the linked ship_update (null for non-ship types); `invoiceNumber`
+ * from the linked invoice (null for non-invoice types). The center derives href/label from `type`. */
 export type NotificationRow = {
   id: string;
   type: string;
@@ -9,7 +10,24 @@ export type NotificationRow = {
   shipUpdateId: string | null;
   title: string | null;
   statusTag: string | null;
+  invoiceId: string | null;
+  invoiceNumber: number | null;
 };
+
+/** The destination + label for a notification row, by type (Story 5.2) — pure so the center, bell,
+ * and toaster all read one source of truth. `invoice_sent` → the in-portal invoice; otherwise the
+ * ship feed. Guards a null id (links to the list/feed root rather than a broken url). */
+export function notificationPresentation(
+  row: Pick<NotificationRow, "type" | "title" | "invoiceId" | "invoiceNumber">,
+): { href: string; label: string } {
+  if (row.type === "invoice_sent") {
+    return {
+      href: row.invoiceId ? `/portal/documents/${row.invoiceId}` : "/portal/documents",
+      label: row.invoiceNumber != null ? `New invoice #${row.invoiceNumber}` : "New invoice",
+    };
+  }
+  return { href: "/portal", label: row.title ?? "New update" };
+}
 
 /** Unread count for the bell badge (absent at zero). Pure → node-unit-tested. */
 export function unreadCount(rows: NotificationRow[]): number {

@@ -1,12 +1,20 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import * as Sentry from "@sentry/nextjs";
 import { requireFreelancer } from "@/server/auth/session";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
-import { createInvoice } from "@/server/db/repositories/invoices.repository";
-import { createInvoiceSchema } from "./invoice.schema";
+import {
+  createInvoice,
+  getInvoice,
+  markInvoicePaid,
+  markInvoiceSent,
+} from "@/server/db/repositories/invoices.repository";
+import { inngest } from "@/server/inngest/client";
+import { createInvoiceSchema, invoiceActionSchema } from "./invoice.schema";
 
 export type CreateInvoiceResult = { ok: true; id: string } | { ok: false; error: string };
+export type InvoiceStatusResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Create a Draft Invoice (Story 5.1). The `getEngagement` guard is LOAD-BEARING, not just
@@ -41,5 +49,100 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
   } catch (err) {
     console.error("[doc-engine] createInvoiceAction failed:", err instanceof Error ? err.message : String(err));
     return { ok: false, error: "Couldn't create that invoice. Please try again." };
+  }
+}
+
+function revalidateInvoice(engagementId: string, invoiceId: string): void {
+  revalidatePath(`/app/engagements/${engagementId}/documents`); // the list (status chip)
+  revalidatePath(`/app/engagements/${engagementId}/documents/${invoiceId}`); // this document view
+}
+
+/**
+ * Emit `invoice.sent` (the notify + branded-email fan-out, Story 5.2). BEST-EFFORT — the status
+ * write has already committed (Sent is the durable truth), so an enqueue failure is logged + reported
+ * but NOT rolled back: the Client still sees the invoice in the portal; only the ping is missed.
+ * Mirrors `emitPublished` (the OPPOSITE of the webhook's record-before-enqueue compensation).
+ */
+async function emitInvoiceSent(row: { id: string; engagementId: string; tenantId: string }): Promise<void> {
+  try {
+    await inngest.send({
+      name: "invoice.sent",
+      data: { invoiceId: row.id, engagementId: row.engagementId, tenantId: row.tenantId },
+    });
+  } catch (err) {
+    console.error("[doc-engine] invoice.sent enqueue failed:", err instanceof Error ? err.message : String(err));
+    Sentry.captureException(err);
+  }
+}
+
+/**
+ * Send a Draft Invoice (Story 5.2). The `getInvoice` ownership + `engagementId` cross-check is
+ * LOAD-BEARING (the 5.1/3.8 lesson): `invoice_scope`'s WITH CHECK only gates `tenant_id` for a
+ * freelancer ctx, so an id-only write could touch another engagement, and a tampered `engagementId`
+ * must not mis-target. `markInvoiceSent` is a guarded UPDATE (`status='draft'`) — the atomic
+ * concurrency boundary, so EXACTLY ONE `invoice.sent` fires even under a double-send. Status enum is
+ * Draft → Sent → Paid only; there is no payment processing anywhere.
+ */
+export async function sendInvoiceAction(input: unknown): Promise<InvoiceStatusResult> {
+  const ctx = await requireFreelancer();
+
+  const parsed = invoiceActionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Couldn't send that invoice." };
+  }
+  const { invoiceId, engagementId } = parsed.data;
+
+  try {
+    const invoice = await getInvoice(ctx, invoiceId);
+    if (!invoice || invoice.engagementId !== engagementId) {
+      return { ok: false, error: "That invoice no longer exists." };
+    }
+    if (invoice.status !== "draft") {
+      return { ok: false, error: "That invoice has already been sent." };
+    }
+
+    const sent = await markInvoiceSent(ctx, invoiceId);
+    if (!sent) return { ok: false, error: "That invoice has already been sent." }; // lost the race → no emit
+
+    await emitInvoiceSent(sent);
+    revalidateInvoice(engagementId, invoiceId);
+    return { ok: true };
+  } catch (err) {
+    console.error("[doc-engine] sendInvoiceAction failed:", err instanceof Error ? err.message : String(err));
+    return { ok: false, error: "Couldn't send that invoice. Please try again." };
+  }
+}
+
+/**
+ * Mark a Sent Invoice Paid (Story 5.2) — the manual, out-of-band status flip. `markInvoicePaid` is
+ * guarded (`status='sent'`) so a Draft can NEVER skip to Paid (Draft → Sent → Paid only). NO Inngest
+ * event, NO email (Paid is the Freelancer's private bookkeeping). Same ownership guard as send.
+ */
+export async function markInvoicePaidAction(input: unknown): Promise<InvoiceStatusResult> {
+  const ctx = await requireFreelancer();
+
+  const parsed = invoiceActionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Couldn't update that invoice." };
+  }
+  const { invoiceId, engagementId } = parsed.data;
+
+  try {
+    const invoice = await getInvoice(ctx, invoiceId);
+    if (!invoice || invoice.engagementId !== engagementId) {
+      return { ok: false, error: "That invoice no longer exists." };
+    }
+    if (invoice.status !== "sent") {
+      return { ok: false, error: "Only a sent invoice can be marked paid." };
+    }
+
+    const paid = await markInvoicePaid(ctx, invoiceId);
+    if (!paid) return { ok: false, error: "Only a sent invoice can be marked paid." };
+
+    revalidateInvoice(engagementId, invoiceId);
+    return { ok: true };
+  } catch (err) {
+    console.error("[doc-engine] markInvoicePaidAction failed:", err instanceof Error ? err.message : String(err));
+    return { ok: false, error: "Couldn't update that invoice. Please try again." };
   }
 }

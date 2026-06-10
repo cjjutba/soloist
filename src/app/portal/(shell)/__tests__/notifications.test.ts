@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { selectToasts, unreadCount, type NotificationRow } from "../notifications";
+import { notificationPresentation, selectToasts, unreadCount, type NotificationRow } from "../notifications";
 
 const row = (id: string, readAt: string | null): NotificationRow => ({
   id,
@@ -9,6 +9,8 @@ const row = (id: string, readAt: string | null): NotificationRow => ({
   shipUpdateId: "s",
   title: "x",
   statusTag: "shipped",
+  invoiceId: null,
+  invoiceNumber: null,
 });
 
 describe("Story 4.1 — unreadCount", () => {
@@ -72,5 +74,28 @@ describe("Story 4.2 — selectToasts (toast only on publish-while-active)", () =
   it("a small batch (≤ maxBurst) of new ids while active → all toast", () => {
     const r = selectToasts({ initialized: true, seen: new Set(["x"]) }, [row("a", null), row("b", null), row("x", null)], { hidden: false, resyncing: false });
     expect(r.toasts.map((n) => n.id).sort()).toEqual(["a", "b"]);
+  });
+});
+
+describe("Story 5.2 — notificationPresentation (href + label by type)", () => {
+  it("an invoice_sent row → the in-portal invoice link + an invoice label", () => {
+    expect(
+      notificationPresentation({ type: "invoice_sent", title: null, invoiceId: "inv-9", invoiceNumber: 3 }),
+    ).toEqual({ href: "/portal/documents/inv-9", label: "New invoice #3" });
+  });
+
+  it("an invoice_sent row with a missing id/number → the documents list + a generic label (no broken url)", () => {
+    expect(
+      notificationPresentation({ type: "invoice_sent", title: null, invoiceId: null, invoiceNumber: null }),
+    ).toEqual({ href: "/portal/documents", label: "New invoice" });
+  });
+
+  it("a ship_published row → the feed + the ship title (falls back to 'New update')", () => {
+    expect(
+      notificationPresentation({ type: "ship_published", title: "Shipped auth", invoiceId: null, invoiceNumber: null }),
+    ).toEqual({ href: "/portal", label: "Shipped auth" });
+    expect(
+      notificationPresentation({ type: "ship_published", title: null, invoiceId: null, invoiceNumber: null }),
+    ).toEqual({ href: "/portal", label: "New update" });
   });
 });

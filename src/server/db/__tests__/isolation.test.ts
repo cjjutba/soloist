@@ -588,3 +588,32 @@ describe("NFR-2 isolation — invoices (Story 5.1)", () => {
     expect(rows).toHaveLength(0);
   });
 });
+
+describe("NFR-2 isolation — invoice notifications (Story 5.2: notifications.invoice_id)", () => {
+  it("(ap) an invoice_sent notification (invoice_id set) is Client-visible — the new column rides notification_scope", async () => {
+    // Resolve Tenant A's seeded invoice id under a scoped read, then fan a notification onto it.
+    const [inv] = await asTenant(TENANT_A, (tx) => tx.select({ id: invoices.id }).from(invoices));
+    await asTenant(TENANT_A, (tx) =>
+      tx.insert(notifications).values({
+        tenantId: TENANT_A, engagementId: ENG_A1, userId: "client_a", type: "invoice_sent", invoiceId: inv.id,
+      }),
+    );
+    // A Client (engagement ctx E1) sees the invoice notification — the dual-scope policy covers the new column.
+    const rows = await asClient(TENANT_A, ENG_A1, (tx) =>
+      tx.select().from(notifications).where(eq(notifications.type, "invoice_sent")),
+    );
+    expect(rows).toHaveLength(1);
+    expect(rows[0].invoiceId).toBe(inv.id);
+  });
+
+  it("(aq) WITH CHECK still blocks an invoice_sent notification forged for ANOTHER Tenant", async () => {
+    const [inv] = await asTenant(TENANT_A, (tx) => tx.select({ id: invoices.id }).from(invoices));
+    await expect(
+      asTenant(TENANT_A, (tx) =>
+        tx.insert(notifications).values({
+          tenantId: TENANT_B, engagementId: ENG_A2, userId: "client_a", type: "invoice_sent", invoiceId: inv.id,
+        }),
+      ),
+    ).rejects.toThrow();
+  });
+});

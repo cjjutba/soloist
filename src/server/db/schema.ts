@@ -346,10 +346,12 @@ export const webhookEvents = pgTable("webhook_events", {
 });
 
 /**
- * In-app notifications (Story 3.6). Created by the `ship/update.published` Inngest fan-out for
- * the Engagement's Client; Epic 4 builds the center/toast/prefs that read them. Dual-scope RLS
- * (same shape as ship_updates) — a Client (engagement ctx) sees their Engagement's rows. The
- * partial unique on (user_id, ship_update_id) makes the fan-out idempotent (a retry can't dupe).
+ * In-app notifications (Story 3.6). Created by the `ship/update.published` fan-out (3.6) and the
+ * `invoice.sent` fan-out (5.2) for the Engagement's Client; Epic 4 builds the center/toast/prefs
+ * that read them. Dual-scope RLS (same shape as ship_updates) — a Client (engagement ctx) sees
+ * their Engagement's rows. Two DISJOINT partial uniques key the fan-out idempotency: one per
+ * (recipient, ship_update) and one per (recipient, invoice) — a row carries at most one source id,
+ * so a retry can't dupe either type.
  */
 export const notifications = pgTable(
   "notifications",
@@ -366,17 +368,27 @@ export const notifications = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }), // the recipient (the Client)
-    type: text("type").notNull(), // ship_published (v1) | invoice_sent | engagement_start (later)
+    type: text("type").notNull(), // ship_published (3.6) | invoice_sent (5.2) | engagement_start (later)
     shipUpdateId: uuid("ship_update_id").references(() => shipUpdates.id, { onDelete: "cascade" }),
+    // The linked Invoice for an `invoice_sent` notification (Story 5.2) — nullable (null for ship/
+    // other types). The notification center links it to the in-portal invoice. FK cascade → a
+    // deleted invoice takes its notification with it.
+    invoiceId: uuid("invoice_id").references(() => invoices.id, { onDelete: "cascade" }),
     readAt: timestamp("read_at", { withTimezone: true }), // Epic 4 marks read
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [
     // Fan-out idempotency: one ship_published notification per (recipient, ship_update). The
-    // partial WHERE leaves future null-ship_update_id rows (invoice/engagement) unconstrained.
+    // partial WHERE leaves null-ship_update_id rows (invoice/engagement) unconstrained.
     uniqueIndex("notifications_ship_dedup")
       .on(t.userId, t.shipUpdateId)
       .where(sql`ship_update_id IS NOT NULL`),
+    // The invoice twin (Story 5.2): one invoice_sent notification per (recipient, invoice). Disjoint
+    // from the ship dedup (a row has at most one of ship_update_id/invoice_id), so a bare
+    // onConflictDoNothing in createNotification can only ever fire as one of these intended dedups.
+    uniqueIndex("notifications_invoice_dedup")
+      .on(t.userId, t.invoiceId)
+      .where(sql`invoice_id IS NOT NULL`),
     pgPolicy("notification_scope", {
       for: "all",
       using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,

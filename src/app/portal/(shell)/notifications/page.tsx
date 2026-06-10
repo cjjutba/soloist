@@ -16,6 +16,8 @@ export default async function NotificationsPage() {
     shipUpdateId: n.shipUpdateId,
     title: n.title,
     statusTag: n.statusTag,
+    invoiceId: n.invoiceId,
+    invoiceNumber: n.invoiceNumber,
   }));
 
   return <NotificationCenter initialRows={rows} />;

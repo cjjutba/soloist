@@ -6,11 +6,13 @@ import { getBranding } from "@/server/db/repositories/branding.repository";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
 import { getInvoice } from "@/server/db/repositories/invoices.repository";
-import { InvoiceDocument } from "../invoice-document";
+import { InvoiceDocument } from "@/components/invoice/invoice-document";
+import { InvoiceActions } from "../invoice-actions";
 
-/** A single Invoice — the premium read-only document view (Story 5.1). Self-guards (the `[invoiceId]`
- * route is nested under the `(detail)` layout, but defensively re-resolves). The invoice must belong
- * to this Engagement (URL-tamper defense atop RLS). 5.2 adds send/status; 5.3 adds the PDF. */
+/** A single Invoice — the premium read-only document view (Story 5.1) + the Freelancer status
+ * actions (Story 5.2: Send a Draft / Mark a Sent invoice Paid). Self-guards (the `[invoiceId]` route
+ * is nested under the `(detail)` layout, but defensively re-resolves). The invoice must belong to
+ * this Engagement (URL-tamper defense atop RLS). 5.3 adds the PDF. */
 export default async function InvoiceViewPage({
   params,
 }: {
@@ -43,6 +45,7 @@ export default async function InvoiceViewPage({
         logoUrl={branding?.logoBlobUrl ?? null}
         accentHex={branding?.accentHex ?? "#5b5bd6"}
       />
+      <InvoiceActions invoiceId={invoice.id} engagementId={id} status={invoice.status} />
     </div>
   );
 }

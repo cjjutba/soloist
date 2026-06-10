@@ -12,7 +12,7 @@ import {
   markAllNotificationsReadAction,
   markNotificationsReadAction,
 } from "@/server/portal/notifications.actions";
-import { unreadCount, type NotificationRow } from "./notifications";
+import { notificationPresentation, unreadCount, type NotificationRow } from "./notifications";
 
 /**
  * The Client notification center (Story 4.1). RSC seeds `initialRows`; this island polls the shared
@@ -87,10 +87,11 @@ export function NotificationCenter({ initialRows }: { initialRows: NotificationR
           <ul className="flex flex-col gap-2">
             {rows.map((n) => {
               const isUnread = n.readAt == null;
+              const { href, label } = notificationPresentation(n);
               return (
                 <li key={n.id}>
                   <Link
-                    href="/portal"
+                    href={href}
                     onClick={() => {
                       if (isUnread) void markRead([n.id]);
                     }}
@@ -111,7 +112,7 @@ export function NotificationCenter({ initialRows }: { initialRows: NotificationR
                       </time>
                     </div>
                     <p className="mt-2 text-sm font-medium">
-                      {n.title ?? "New update"}
+                      {label}
                       {isUnread ? <span className="sr-only"> (unread)</span> : null}
                     </p>
                   </Link>
