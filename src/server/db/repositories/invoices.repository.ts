@@ -143,6 +143,19 @@ export async function markInvoicePaid(ctx: TenantContext, id: string) {
 }
 
 /**
+ * Persist the generated PDF's Blob URL (Story 5.3) — RLS-scoped, defense-in-depth atop the policy.
+ * The lazy generate-once-and-cache: the first download renders + stores the PDF, this records the
+ * blob url so later downloads reuse it (`getDownloadUrl`) instead of re-rendering. A client ctx may
+ * write its OWN engagement's invoice (a cache field, not business data); a freelancer ctx is
+ * tenant-scoped — `invoice_scope` confines both.
+ */
+export async function setInvoicePdfUrl(ctx: TenantContext, id: string, url: string): Promise<void> {
+  await withTenant(ctx, async (tx) => {
+    await tx.update(invoices).set({ pdfBlobUrl: url }).where(eq(invoices.id, id));
+  });
+}
+
+/**
  * Everything the `invoice.sent` email needs, in one raw (system) read — the Inngest fan-out has no
  * session (mirror `loadShipPublishedContext`). Keyed on the TRUSTED event's `invoiceId`, never
  * request input. Returns null if the invoice is gone; `logoUrl`/`accentHex` are null when the Tenant
