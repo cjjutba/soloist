@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-06
-last_updated: 2026-06-10
+last_updated: 2026-06-10  # Epic 5 (Doc Engine — Invoices) DONE: 5.1/5.2/5.3 + retro. The 5-epic roadmap is complete.
 project: soloist
 project_key: NOKEY
 tracking_system: file-system
@@ -86,8 +86,8 @@ development_status:
   epic-4-retrospective: done
 
   # ── Epic 5: Doc Engine — Invoices ──
-  epic-5: in-progress
+  epic-5: done
   5-1-create-invoice-from-template-prefilled-shared-data: done
   5-2-send-invoice-client-view-manual-status: done
   5-3-branded-invoice-pdf-export: done
-  epic-5-retrospective: optional
+  epic-5-retrospective: done
