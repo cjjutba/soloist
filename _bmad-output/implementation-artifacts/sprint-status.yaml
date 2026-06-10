@@ -89,5 +89,5 @@ development_status:
   epic-5: in-progress
   5-1-create-invoice-from-template-prefilled-shared-data: done
   5-2-send-invoice-client-view-manual-status: done
-  5-3-branded-invoice-pdf-export: backlog
+  5-3-branded-invoice-pdf-export: done
   epic-5-retrospective: optional

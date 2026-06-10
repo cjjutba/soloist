@@ -7,12 +7,13 @@ import { getEngagement } from "@/server/db/repositories/engagements.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
 import { getInvoice } from "@/server/db/repositories/invoices.repository";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
+import { InvoiceDownloadLink } from "@/components/invoice/invoice-download-link";
 import { InvoiceActions } from "../invoice-actions";
 
 /** A single Invoice — the premium read-only document view (Story 5.1) + the Freelancer status
- * actions (Story 5.2: Send a Draft / Mark a Sent invoice Paid). Self-guards (the `[invoiceId]` route
- * is nested under the `(detail)` layout, but defensively re-resolves). The invoice must belong to
- * this Engagement (URL-tamper defense atop RLS). 5.3 adds the PDF. */
+ * actions (Story 5.2) + the branded-PDF Download (Story 5.3, for a Sent/Paid invoice). Self-guards
+ * (the `[invoiceId]` route is nested under the `(detail)` layout, but defensively re-resolves). The
+ * invoice must belong to this Engagement (URL-tamper defense atop RLS). */
 export default async function InvoiceViewPage({
   params,
 }: {
@@ -32,12 +33,16 @@ export default async function InvoiceViewPage({
 
   return (
     <div className="flex flex-col gap-4">
-      <Link
-        href={`/app/engagements/${id}/documents`}
-        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        ← Invoices
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href={`/app/engagements/${id}/documents`}
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          ← Invoices
+        </Link>
+        {/* A branded PDF is exportable once the invoice is Sent/Paid (a Draft has none). */}
+        {invoice.status !== "draft" ? <InvoiceDownloadLink invoiceId={invoice.id} /> : null}
+      </div>
       <InvoiceDocument
         invoice={invoice}
         clientName={engagement.clientDisplayName}

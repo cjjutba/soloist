@@ -14,9 +14,10 @@ export default defineConfig({
     // resume with the data layer (Story 1.2) and the auth guard (Story 1.4).
     passWithNoTests: true,
     // The PGlite isolation/repository suites apply EVERY committed migration in `beforeAll` (real
-    // RLS semantics, no docker). With ~10 such files running in parallel, a cold migration replay
-    // can exceed Vitest's 10s default under load — a setup-budget ceiling, not slow logic. 30s gives
-    // headroom so the suite is reliably green (assertions/timeouts of the tests themselves unaffected).
-    hookTimeout: 30_000,
+    // RLS semantics, no docker). ~10 such files replay migrations; the setup is ~3s normally but on a
+    // shared/loaded dev box (multiple concurrent sessions) a cold replay can balloon. This is a
+    // setup-budget ceiling ONLY — a genuinely broken beforeAll throws immediately, so the headroom
+    // tolerates CPU contention without masking a real failure (assertions/test logic unaffected).
+    hookTimeout: 60_000,
   },
 });

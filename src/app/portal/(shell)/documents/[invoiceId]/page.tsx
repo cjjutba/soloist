@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { FocusHeading } from "@/components/ui/focus-heading";
 import { InvoiceDocument } from "@/components/invoice/invoice-document";
+import { InvoiceDownloadLink } from "@/components/invoice/invoice-download-link";
 import { isUuid } from "@/lib/uuid";
 import { requireOnboardedClient } from "@/server/auth/session";
 import { getBranding } from "@/server/db/repositories/branding.repository";
@@ -36,12 +37,16 @@ export default async function PortalInvoicePage({
   return (
     <div className="flex flex-col gap-4">
       <FocusHeading className="sr-only">Invoice</FocusHeading>
-      <Link
-        href="/portal/documents"
-        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-      >
-        ← Documents
-      </Link>
+      <div className="flex items-center justify-between gap-3">
+        <Link
+          href="/portal/documents"
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          ← Documents
+        </Link>
+        {/* The Client only ever sees Sent/Paid here (getClientInvoice excludes drafts), so always offer it. */}
+        <InvoiceDownloadLink invoiceId={invoice.id} />
+      </div>
       <InvoiceDocument
         invoice={invoice}
         clientName={engagement?.clientDisplayName ?? session.name}
