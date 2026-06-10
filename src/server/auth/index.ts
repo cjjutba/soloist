@@ -8,7 +8,7 @@ import { env } from "@/env";
 import { db } from "@/server/db";
 import * as schema from "@/server/db/schema";
 import { activateTenant } from "@/server/db/repositories/tenants.repository";
-import { sendVerificationEmail } from "./email";
+import { sendResetPasswordEmail, sendVerificationEmail } from "./email";
 
 /**
  * Better Auth — email/password CORE only (no organization plugin; the Tenant is the
@@ -33,6 +33,17 @@ export const auth = betterAuth({
     // sign-in attempt hits the unverified account and RE-SENDS the verification email (the
     // duplicate). The user is signed in by `autoSignInAfterVerification` once they confirm.
     autoSignIn: false,
+    // Password reset (built-in). Better Auth builds the reset `url`, stores a single-use
+    // token, and equalizes the request-reset response whether or not the email exists (no
+    // enumeration) — we only supply the transport. 1-hour token, same window as verification.
+    sendResetPassword: async ({ user, url, token }) => {
+      await sendResetPasswordEmail({ user, url, token });
+    },
+    resetPasswordTokenExpiresIn: 60 * 60,
+    // A password reset is the canonical "my account may be compromised" action, so it
+    // logs out every other live session (CJ-approved during review — touches the spec's
+    // Ask-First "session behavior" boundary).
+    revokeSessionsOnPasswordReset: true,
   },
 
   // Session policy (Story 1.4): 7-day absolute expiry, 1-day sliding refresh.

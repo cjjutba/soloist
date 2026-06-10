@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { signIn } from "@/server/auth/client";
 
 const FormSchema = z.object({
@@ -79,14 +80,21 @@ export function LoginForm() {
             />
           </Field>
           <Field label="Password" htmlFor="password" error={errors.password?.message}>
-            <Input
+            <PasswordInput
               id="password"
-              type="password"
               autoComplete="current-password"
               aria-invalid={!!errors.password}
               {...register("password")}
             />
           </Field>
+          <div className="-mt-2 text-right text-sm">
+            <Link
+              href="/forgot-password"
+              className="font-medium text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Forgot password?
+            </Link>
+          </div>
           <Button type="submit" loading={isSubmitting} className="mt-2">
             Log in
           </Button>
