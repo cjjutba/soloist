@@ -9,6 +9,7 @@ import { db } from "@/server/db";
 import * as schema from "@/server/db/schema";
 import { activateTenant } from "@/server/db/repositories/tenants.repository";
 import { sendResetPasswordEmail, sendVerificationEmail } from "./email";
+import { buildTrustedOrigins } from "./trusted-origins";
 
 /**
  * Better Auth — email/password CORE only (no organization plugin; the Tenant is the
@@ -20,8 +21,9 @@ export const auth = betterAuth({
   database: drizzleAdapter(db, { provider: "pg", schema }),
   secret: env.BETTER_AUTH_SECRET,
   baseURL: env.BETTER_AUTH_URL,
-  // Single-domain: only our canonical origin is trusted (CSRF / origin checks).
-  trustedOrigins: [env.BETTER_AUTH_URL],
+  // Prod trusts ONLY our canonical origin (CSRF). Dev also trusts any localhost port, since the
+  // Next dev port floats (3000/3001/3002…) — see buildTrustedOrigins. NEVER loosened in prod.
+  trustedOrigins: buildTrustedOrigins(env.BETTER_AUTH_URL),
 
   emailAndPassword: {
     enabled: true,
