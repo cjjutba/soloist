@@ -4,6 +4,7 @@ import {
   createNotification,
   loadShipPublishedContext,
 } from "@/server/db/repositories/notifications.repository";
+import { publishToEngagement, publishToUser } from "@/server/realtime/publish";
 import { sendShipPublishedEmail } from "@/server/ship-feed/ship-published-email";
 import { inngest, type ShipPublished } from "../client";
 
@@ -22,6 +23,11 @@ export type ShipPublishedResult =
  * is already durable and is never rolled back.
  */
 export async function handleShipPublished(data: ShipPublished): Promise<ShipPublishedResult> {
+  // Realtime feed signal (best-effort): a published update is visible in the Client's feed
+  // regardless of their notification mute / whether they've joined yet, so nudge the engagement
+  // channel to refetch FIRST — before the notify gate that can early-return on muted/no-recipient.
+  await publishToEngagement(data.engagementId, "ship.published");
+
   // The event-agnostic notify gate (Story 4.4): the Engagement's Client AND their mute pref, in one
   // raw system read keyed on the trusted event id. `no-recipient` = none accepted yet (the feed
   // still shows it once they join); `muted` = the Client opted out → send NOTHING (no in-app row,
@@ -40,6 +46,10 @@ export async function handleShipPublished(data: ShipPublished): Promise<ShipPubl
       shipUpdateId: data.shipUpdateId,
     },
   );
+
+  // Realtime notification signal (best-effort): the bell got a new row → nudge the recipient's
+  // user channel so it refetches instantly instead of waiting for the fallback poll.
+  await publishToUser(recipient.userId, "notification");
 
   // Re-read the email data (fresh; never trust event-carried content). A dismissed/edited race
   // that left it non-published → skip the email (the notification already records the moment).

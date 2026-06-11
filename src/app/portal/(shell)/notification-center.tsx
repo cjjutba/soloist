@@ -32,7 +32,8 @@ export function NotificationCenter({ initialRows }: { initialRows: NotificationR
       return json.notifications;
     },
     initialData: initialRows,
-    refetchInterval: 20_000,
+    // Realtime makes new notifications instant; the poll is now a slow fallback.
+    refetchInterval: 60_000,
   });
   const rows = data;
   const unread = unreadCount(rows);

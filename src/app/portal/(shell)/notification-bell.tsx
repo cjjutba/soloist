@@ -28,7 +28,9 @@ export function NotificationBell() {
       const json = (await res.json()) as { notifications: NotificationRow[] };
       return json.notifications;
     },
-    refetchInterval: 20_000,
+    // Realtime (the user channel "notification" signal) makes the bell instant; the poll is now a
+    // slow fallback for when Ably can't connect.
+    refetchInterval: 60_000,
   });
   const count = data ? unreadCount(data) : 0;
 

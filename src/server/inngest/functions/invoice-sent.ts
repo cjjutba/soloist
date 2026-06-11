@@ -2,6 +2,7 @@ import { env } from "@/env";
 import { resolveNotifiableRecipient } from "@/server/db/repositories/client-access.repository";
 import { createNotification } from "@/server/db/repositories/notifications.repository";
 import { loadInvoiceSentContext } from "@/server/db/repositories/invoices.repository";
+import { publishToEngagement, publishToUser } from "@/server/realtime/publish";
 import { sendInvoiceSentEmail } from "@/server/doc-engine/invoice-sent-email";
 import { inngest, type InvoiceSent } from "../client";
 
@@ -19,6 +20,11 @@ export type InvoiceSentResult =
  * retries (NFR-4); the send/status write is already durable and is never rolled back.
  */
 export async function handleInvoiceSent(data: InvoiceSent): Promise<InvoiceSentResult> {
+  // Realtime signal (best-effort): the invoice is visible in the portal Documents regardless of the
+  // notification mute, so nudge the engagement channel first (the live invoice view is a later slice
+  // but the foundation publishes it now).
+  await publishToEngagement(data.engagementId, "invoice.sent");
+
   // The SAME event-agnostic notify gate as ship-published (Story 4.4): the Engagement's Client AND
   // their mute pref, in one raw system read keyed on the trusted event id. `muted` = the Client
   // opted out → send NOTHING (no in-app row, no email; the 4.2 toast is transitively silent — but
@@ -37,6 +43,9 @@ export async function handleInvoiceSent(data: InvoiceSent): Promise<InvoiceSentR
       invoiceId: data.invoiceId,
     },
   );
+
+  // Realtime notification signal (best-effort): nudge the recipient's bell to refetch instantly.
+  await publishToUser(recipient.userId, "notification");
 
   // Re-read the email data fresh (never trust event-carried content). Skip the email ONLY if the
   // invoice is gone or never actually left draft (a dismissed/rolled-back race) — the notification

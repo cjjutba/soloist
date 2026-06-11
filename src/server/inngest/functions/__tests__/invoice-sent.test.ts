@@ -5,6 +5,8 @@ const m = vi.hoisted(() => ({
   createNotification: vi.fn(),
   loadInvoiceSentContext: vi.fn(),
   sendInvoiceSentEmail: vi.fn(),
+  publishToEngagement: vi.fn(),
+  publishToUser: vi.fn(),
 }));
 
 vi.mock("@/env", () => ({ env: { BETTER_AUTH_URL: "https://soloist.cjjutba.com" } }));
@@ -18,6 +20,10 @@ vi.mock("@/server/db/repositories/invoices.repository", () => ({
   loadInvoiceSentContext: m.loadInvoiceSentContext,
 }));
 vi.mock("@/server/doc-engine/invoice-sent-email", () => ({ sendInvoiceSentEmail: m.sendInvoiceSentEmail }));
+vi.mock("@/server/realtime/publish", () => ({
+  publishToEngagement: m.publishToEngagement,
+  publishToUser: m.publishToUser,
+}));
 vi.mock("../../client", () => ({ inngest: { createFunction: () => ({}) } }));
 
 import { handleInvoiceSent } from "../invoice-sent";
@@ -44,16 +50,20 @@ beforeEach(() => {
   m.createNotification.mockResolvedValue({ id: "n1" });
   m.loadInvoiceSentContext.mockResolvedValue(ctx);
   m.sendInvoiceSentEmail.mockResolvedValue(undefined);
+  m.publishToEngagement.mockResolvedValue(undefined);
+  m.publishToUser.mockResolvedValue(undefined);
 });
 
 describe("Story 5.2 — invoice-sent fan-out", () => {
-  it("recipient found → invoice_sent notification (system ctx, invoice_id) + branded email", async () => {
+  it("recipient found → invoice_sent notification (system ctx, invoice_id) + branded email + realtime signals", async () => {
     const res = await handleInvoiceSent(data);
     expect(res).toEqual({ status: "sent" });
     expect(m.createNotification).toHaveBeenCalledWith(
       { tenantId: "t1", userId: "system", role: "freelancer" },
       { engagementId: "eng1", userId: "client-1", type: "invoice_sent", invoiceId: "inv1" },
     );
+    expect(m.publishToEngagement).toHaveBeenCalledWith("eng1", "invoice.sent");
+    expect(m.publishToUser).toHaveBeenCalledWith("client-1", "notification");
     expect(m.sendInvoiceSentEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "client@example.com",

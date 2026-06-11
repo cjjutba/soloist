@@ -5,6 +5,8 @@ const m = vi.hoisted(() => ({
   createNotification: vi.fn(),
   loadShipPublishedContext: vi.fn(),
   sendShipPublishedEmail: vi.fn(),
+  publishToEngagement: vi.fn(),
+  publishToUser: vi.fn(),
 }));
 
 vi.mock("@/env", () => ({ env: { BETTER_AUTH_URL: "https://soloist.cjjutba.com" } }));
@@ -16,6 +18,10 @@ vi.mock("@/server/db/repositories/notifications.repository", () => ({
   loadShipPublishedContext: m.loadShipPublishedContext,
 }));
 vi.mock("@/server/ship-feed/ship-published-email", () => ({ sendShipPublishedEmail: m.sendShipPublishedEmail }));
+vi.mock("@/server/realtime/publish", () => ({
+  publishToEngagement: m.publishToEngagement,
+  publishToUser: m.publishToUser,
+}));
 vi.mock("../../client", () => ({ inngest: { createFunction: () => ({}) } }));
 
 import { handleShipPublished } from "../ship-published";
@@ -41,16 +47,21 @@ beforeEach(() => {
   m.createNotification.mockResolvedValue({ id: "n1" });
   m.loadShipPublishedContext.mockResolvedValue(ctx);
   m.sendShipPublishedEmail.mockResolvedValue(undefined);
+  m.publishToEngagement.mockResolvedValue(undefined);
+  m.publishToUser.mockResolvedValue(undefined);
 });
 
 describe("Story 3.6 — ship-published fan-out", () => {
-  it("recipient found → notification (system ctx) + branded email", async () => {
+  it("recipient found → notification (system ctx) + branded email + realtime signals", async () => {
     const res = await handleShipPublished(data);
     expect(res).toEqual({ status: "sent" });
     expect(m.createNotification).toHaveBeenCalledWith(
       { tenantId: "t1", userId: "system", role: "freelancer" },
       { engagementId: "eng1", userId: "client-1", type: "ship_published", shipUpdateId: "su1" },
     );
+    // Realtime: the feed signal on the engagement channel + the bell signal on the recipient.
+    expect(m.publishToEngagement).toHaveBeenCalledWith("eng1", "ship.published");
+    expect(m.publishToUser).toHaveBeenCalledWith("client-1", "notification");
     expect(m.sendShipPublishedEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: "client@example.com",
@@ -69,12 +80,16 @@ describe("Story 3.6 — ship-published fan-out", () => {
     expect(m.sendShipPublishedEmail).not.toHaveBeenCalled();
   });
 
-  it("Story 4.4: client muted notifications → no-op, neither notification nor email (feed still shows it)", async () => {
+  it("Story 4.4: client muted notifications → no notification/email, but the feed signal STILL fires", async () => {
     m.resolveNotifiableRecipient.mockResolvedValue({ status: "muted" });
     const res = await handleShipPublished(data);
     expect(res).toEqual({ status: "muted" });
     expect(m.createNotification).not.toHaveBeenCalled();
     expect(m.sendShipPublishedEmail).not.toHaveBeenCalled();
+    // The published update is visible in the feed regardless of the mute → feed signal fires;
+    // the per-user bell signal does NOT (no notification was created).
+    expect(m.publishToEngagement).toHaveBeenCalledWith("eng1", "ship.published");
+    expect(m.publishToUser).not.toHaveBeenCalled();
   });
 
   it("a non-published context (dismissed/edited race) → notification kept, email skipped", async () => {

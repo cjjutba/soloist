@@ -59,6 +59,15 @@ export async function listEngagements(
   );
 }
 
+/** Just the caller's Engagement ids (RLS-scoped) — used to scope a freelancer's realtime token
+ * capability to the channels for their own engagements. Includes archived (still their channels). */
+export async function listEngagementIds(ctx: TenantContext): Promise<string[]> {
+  const rows = await withTenant(ctx, (tx) =>
+    tx.select({ id: engagements.id }).from(engagements),
+  );
+  return rows.map((r) => r.id);
+}
+
 /** The dashboard read (Story 2.2): the caller's active Engagements, each with its
  * candidate count, sorted "needs attention first". */
 export async function listDashboard(ctx: TenantContext): Promise<DashboardEngagement[]> {

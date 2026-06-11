@@ -4,8 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FocusHeading } from "@/components/ui/focus-heading";
 import { SHIP_STATUS, SHIP_STATUS_KEYS, toShipStatus } from "@/components/ui/ship-status";
+import { engagementChannel } from "@/lib/realtime-channels";
 import { cn } from "@/lib/utils";
 import { ShipUpdateCard } from "./ship-update-card";
+import { useRealtimeInvalidate } from "./realtime-provider";
 import { filterUpdates, newTopAnnouncement, type FeedFilter, type FeedUpdate } from "./feed";
 
 const FILTERS: { key: FeedFilter; label: string }[] = [
@@ -16,9 +18,10 @@ const FILTERS: { key: FeedFilter; label: string }[] = [
 const statusLabel = (tag: string) => SHIP_STATUS[toShipStatus(tag)].label;
 
 /**
- * The live Client Ship Feed (Story 3.7) — RSC seeds `initialUpdates`; this island polls
- * `GET /api/feed/[engagementId]` every ~20s (+ on focus, inherited from providers; paused while
- * hidden) and renders published updates newest-first, filterable by status. A new top item is
+ * The live Client Ship Feed (Story 3.7; realtime as of the Ably slice) — RSC seeds `initialUpdates`;
+ * this island refetches `GET /api/feed/[engagementId]` INSTANTLY on the `ship.published` realtime
+ * signal (Ably), with a 60s poll (+ on focus) as the fallback. Renders published updates
+ * newest-first, filterable by status. A new top item is
  * announced via a visually-hidden `aria-live="polite"` region WITHOUT moving focus; the cards
  * animate in under `motion-safe`. Always mounted (even empty) so the first update arrives live.
  */
@@ -45,8 +48,14 @@ export function ShipFeed({
       return json.updates;
     },
     initialData: initialUpdates,
-    refetchInterval: 20_000,
+    // Realtime makes this instant; the poll is now just a slow fallback for when Ably can't connect.
+    refetchInterval: 60_000,
   });
+
+  // Push: refetch the instant a new update is published to this engagement (the publish fan-out
+  // signals `ship.published` on the engagement channel). No-op if realtime is disabled → the poll
+  // above covers it.
+  useRealtimeInvalidate(engagementChannel(engagementId), "ship.published", ["feed", engagementId]);
 
   // `initialData` guarantees `data` is never undefined, so this is the stable query array (no
   // `?? []` that would churn the effect dep every render).

@@ -29,7 +29,8 @@ export function NotificationToaster() {
       const json = (await res.json()) as { notifications: NotificationRow[] };
       return json.notifications;
     },
-    refetchInterval: 20_000,
+    // Realtime makes new notifications instant; the poll is now a slow fallback.
+    refetchInterval: 60_000,
   });
 
   // The tab going hidden marks the next data change (the focus-return refetch) as catch-up.

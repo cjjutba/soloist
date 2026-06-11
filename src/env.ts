@@ -81,6 +81,11 @@ const schema = z.object({
   // row so nothing is lost). Locally the Inngest dev server needs no keys.
   INNGEST_EVENT_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
   INNGEST_SIGNING_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+
+  // Ably realtime (post-roadmap). Server-only ROOT key — the API mints scoped subscribe tokens
+  // for clients (never a raw key) + publishes signal events. Optional: realtime is an enhancement
+  // over polling, so unset → publish no-ops, the token route 503s, clients fall back to polling.
+  ABLY_API_KEY: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
 });
 
 const parsed = schema.safeParse(process.env);
