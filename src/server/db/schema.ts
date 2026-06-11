@@ -192,6 +192,9 @@ export const clientAccess = pgTable(
     // BEFORE sending → off = no in-app row, no email, no toast (the Ship Feed still shows
     // updates — it reads ship_updates, not notifications). Opt-OUT: default true.
     notificationsEnabled: boolean("notifications_enabled").notNull().default(true),
+    // "Seen by client" (presence slice): when the Client last opened the portal feed. The
+    // freelancer derives per-update "Seen" from it (published_at <= last_seen_at). null = never.
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [
@@ -431,6 +434,9 @@ export const invoices = pgTable(
     dueAt: timestamp("due_at", { withTimezone: true }),
     notes: text("notes"),
     pdfBlobUrl: text("pdf_blob_url"), // reserved for the branded PDF (Story 5.3)
+    // "Seen by client" (presence slice): when the Client first opened this invoice in the portal.
+    // null = not yet seen → the freelancer shows "Sent"; set → "✓ Seen".
+    clientViewedAt: timestamp("client_viewed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [

@@ -110,6 +110,48 @@ export async function markOnboarded(ctx: TenantContext): Promise<void> {
   });
 }
 
+/** Stamp when the Client last opened the portal feed ("seen by client"). Always updates (it's
+ * "last" seen), RLS-scoped to the Client's OWN engagement (a freelancer ctx no-ops). */
+export async function markLastSeen(ctx: TenantContext): Promise<void> {
+  const engagementId = ctx.engagementId;
+  if (!engagementId) return; // client ctx only
+  await withTenant(ctx, async (tx) => {
+    await tx
+      .update(clientAccess)
+      .set({ lastSeenAt: sql`now()` })
+      .where(eq(clientAccess.engagementId, engagementId));
+  });
+}
+
+/** The Client's last-viewed time for one Engagement — the freelancer's "Client viewed X ago"
+ * (RLS-scoped → reads only their own Tenant's). null = never opened / no Client yet. */
+export async function getEngagementLastSeen(
+  ctx: TenantContext,
+  engagementId: string,
+): Promise<Date | null> {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .select({ lastSeenAt: clientAccess.lastSeenAt })
+      .from(clientAccess)
+      .where(eq(clientAccess.engagementId, engagementId))
+      .limit(1);
+    return row?.lastSeenAt ?? null;
+  });
+}
+
+/** Map of engagementId → the Client's last-viewed time, for the freelancer dashboard (RLS-scoped).
+ * Engagements with no Client / never-viewed are absent from the map. */
+export async function lastSeenByEngagement(ctx: TenantContext): Promise<Map<string, Date>> {
+  const rows = await withTenant(ctx, (tx) =>
+    tx
+      .select({ engagementId: clientAccess.engagementId, lastSeenAt: clientAccess.lastSeenAt })
+      .from(clientAccess),
+  );
+  const map = new Map<string, Date>();
+  for (const r of rows) if (r.lastSeenAt) map.set(r.engagementId, r.lastSeenAt);
+  return map;
+}
+
 /**
  * Accept an invite atomically (Story 2.4): in ONE transaction, INSERT the `ClientAccess`
  * grant AND stamp `invitations.accepted_at`. `ctx` is the INVITATION-DERIVED scope

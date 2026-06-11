@@ -4,10 +4,10 @@ import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { FocusHeading } from "@/components/ui/focus-heading";
 import { SHIP_STATUS, SHIP_STATUS_KEYS, toShipStatus } from "@/components/ui/ship-status";
+import { useRealtimeInvalidate } from "@/components/realtime/realtime-provider";
 import { engagementChannel } from "@/lib/realtime-channels";
 import { cn } from "@/lib/utils";
 import { ShipUpdateCard } from "./ship-update-card";
-import { useRealtimeInvalidate } from "./realtime-provider";
 import { filterUpdates, newTopAnnouncement, type FeedFilter, type FeedUpdate } from "./feed";
 
 const FILTERS: { key: FeedFilter; label: string }[] = [

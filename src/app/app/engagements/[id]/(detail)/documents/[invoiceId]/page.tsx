@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { formatRelativeTime } from "@/lib/relative-time";
 import { isUuid } from "@/lib/uuid";
 import { requireFreelancer } from "@/server/auth/session";
 import { getBranding } from "@/server/db/repositories/branding.repository";
@@ -40,8 +41,20 @@ export default async function InvoiceViewPage({
         >
           ← Invoices
         </Link>
-        {/* A branded PDF is exportable once the invoice is Sent/Paid (a Draft has none). */}
-        {invoice.status !== "draft" ? <InvoiceDownloadLink invoiceId={invoice.id} /> : null}
+        <div className="flex items-center gap-3">
+          {/* "Seen by client": once Sent, whether the client has opened it (live via CockpitRealtime). */}
+          {invoice.status !== "draft" ? (
+            invoice.clientViewedAt ? (
+              <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                ✓ Seen {formatRelativeTime(invoice.clientViewedAt)}
+              </span>
+            ) : (
+              <span className="text-xs text-muted-foreground">Sent · not viewed yet</span>
+            )
+          ) : null}
+          {/* A branded PDF is exportable once the invoice is Sent/Paid (a Draft has none). */}
+          {invoice.status !== "draft" ? <InvoiceDownloadLink invoiceId={invoice.id} /> : null}
+        </div>
       </div>
       <InvoiceDocument
         invoice={invoice}

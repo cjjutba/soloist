@@ -62,6 +62,11 @@ export default async function CockpitPage() {
                       {formatRelativeTime(e.lastActivityAt)}
                     </time>
                   </span>
+                  {e.lastSeenAt ? (
+                    <span className="text-xs text-emerald-700 dark:text-emerald-400">
+                      Client viewed {formatRelativeTime(e.lastSeenAt)}
+                    </span>
+                  ) : null}
                 </Link>
                 <div className="flex shrink-0 items-center gap-2">
                   <Link

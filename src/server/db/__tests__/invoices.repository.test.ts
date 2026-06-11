@@ -22,6 +22,7 @@ import {
   loadInvoiceSentContext,
   markInvoicePaid,
   markInvoiceSent,
+  markInvoiceViewed,
 } from "../repositories/invoices.repository";
 import { createEngagement } from "../repositories/engagements.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
@@ -135,6 +136,16 @@ describe("Story 5.2 — send, manual status, and the Client (draft-excluding) re
     const draft = (await listInvoices(ctxA(), ENG_A2))[0];
     expect(await getClientInvoice(clientA2(), draft.id)).toBeNull(); // a Draft never leaks to the Client
     expect((await getClientInvoice(clientA(), invId))?.id).toBe(invId); // the paid invoice IS returned
+  });
+
+  it("markInvoiceViewed: first view stamps client_viewed_at (returns the engagement); a re-view → null; a Draft is never stamped", async () => {
+    const first = await markInvoiceViewed(clientA(), invId); // invId is sent/paid by now
+    expect(first?.engagementId).toBe(ENG_A);
+    expect((await getInvoice(ctxA(), invId))?.clientViewedAt).toBeInstanceOf(Date);
+    expect(await markInvoiceViewed(clientA(), invId)).toBeNull(); // already seen → idempotent, no re-signal
+    // A Draft is never "seen" (the ne-draft guard) → ENG_A2's still-draft invoice stays unstamped.
+    const draft = (await listInvoices(ctxA(), ENG_A2))[0];
+    expect(await markInvoiceViewed(clientA2(), draft.id)).toBeNull();
   });
 
   it("loadInvoiceSentContext joins the email data (number/amount/currency/client/tenant; branding optional)", async () => {

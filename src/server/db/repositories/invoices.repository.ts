@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, ne, sql } from "drizzle-orm";
 import { computeAmountTotal } from "@/server/doc-engine/money";
 import type { InvoiceLineItem } from "@/server/doc-engine/invoice.schema";
 import { db } from "../index";
@@ -105,6 +105,23 @@ export async function getClientInvoice(ctx: TenantContext, id: string) {
       .from(invoices)
       .where(and(eq(invoices.id, id), ne(invoices.status, "draft")))
       .limit(1);
+    return row ?? null;
+  });
+}
+
+/** Stamp when the Client FIRST opened this invoice ("seen by client"). First-view only (the IS NULL
+ * guard → idempotent across re-views), RLS-scoped, never a Draft. Returns the engagementId (so the
+ * action can publish the "seen" signal) or null when nothing was stamped (already seen / not theirs). */
+export async function markInvoiceViewed(
+  ctx: TenantContext,
+  id: string,
+): Promise<{ engagementId: string } | null> {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .update(invoices)
+      .set({ clientViewedAt: sql`now()` })
+      .where(and(eq(invoices.id, id), isNull(invoices.clientViewedAt), ne(invoices.status, "draft")))
+      .returning({ engagementId: invoices.engagementId });
     return row ?? null;
   });
 }

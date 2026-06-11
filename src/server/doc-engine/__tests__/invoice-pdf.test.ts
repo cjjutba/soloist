@@ -18,6 +18,7 @@ const baseInvoice: Invoice = {
   dueAt: new Date("2026-06-15T00:00:00Z"),
   notes: "Thanks for your business!",
   pdfBlobUrl: null,
+  clientViewedAt: null,
   createdAt: new Date("2026-06-01T00:00:00Z"),
 };
 

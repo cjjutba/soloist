@@ -2,6 +2,7 @@ import { desc, eq, ne, sql } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
 import { withTenant, type TenantContext } from "../context";
 import { engagements, type Engagement } from "../schema";
+import { lastSeenByEngagement } from "./client-access.repository";
 import { countCandidatesByEngagement } from "./ship-update.repository";
 
 // (Story 3.1's `findSpikeTargetEngagement` shortcut was removed in Story 3.2 — the repo →
@@ -9,7 +10,11 @@ import { countCandidatesByEngagement } from "./ship-update.repository";
 
 /** An Engagement plus the count of unpublished candidate Ship Updates awaiting curation —
  * the dashboard's "needs attention" signal (Story 2.2). */
-export type DashboardEngagement = Engagement & { candidateCount: number };
+export type DashboardEngagement = Engagement & {
+  candidateCount: number;
+  /** When the Client last opened the portal (null = never / no Client) — the "Client viewed X ago" hint. */
+  lastSeenAt: Date | null;
+};
 
 /** Dashboard sort: last-activity (most recent first), then candidate-count (most first),
  * so the Engagements that need attention float to the top (FR-7, UX-DR8). Pure + exported
@@ -74,7 +79,12 @@ export async function listDashboard(ctx: TenantContext): Promise<DashboardEngage
   const rows = await listEngagements(ctx); // active only, RLS-scoped, last-activity desc
   // Story 3.5: the real "needs attention" count — one grouped, RLS-scoped query (not N+1).
   const counts = await countCandidatesByEngagement(ctx);
-  const withCounts = rows.map((e) => ({ ...e, candidateCount: counts.get(e.id) ?? 0 }));
+  const lastSeen = await lastSeenByEngagement(ctx); // "Client viewed X ago" per engagement
+  const withCounts = rows.map((e) => ({
+    ...e,
+    candidateCount: counts.get(e.id) ?? 0,
+    lastSeenAt: lastSeen.get(e.id) ?? null,
+  }));
   return withCounts.sort(compareDashboard);
 }
 

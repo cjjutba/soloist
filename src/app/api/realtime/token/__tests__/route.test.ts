@@ -73,7 +73,7 @@ describe("POST /api/realtime/token", () => {
     expect(arg.clientId).toBe("u1");
     expect(JSON.parse(arg.capability)).toEqual({
       "user:u1": ["subscribe"],
-      [`engagement:${ENG}`]: ["subscribe"],
+      [`engagement:${ENG}`]: ["subscribe", "presence"],
     });
   });
 
@@ -83,7 +83,7 @@ describe("POST /api/realtime/token", () => {
     expect(m.listEngagementIds).toHaveBeenCalledWith({ tenantId: "t1", userId: "f1", role: "freelancer" });
     expect(JSON.parse(m.createTokenRequest.mock.calls[0][0].capability)).toEqual({
       "user:f1": ["subscribe"],
-      [`engagement:${ENG}`]: ["subscribe"],
+      [`engagement:${ENG}`]: ["subscribe", "presence"],
     });
   });
 });

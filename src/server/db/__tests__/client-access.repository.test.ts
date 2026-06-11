@@ -18,7 +18,10 @@ import {
   acceptInvitationTx,
   findClientAccessByUserId,
   findClientRecipientForEngagement,
+  getEngagementLastSeen,
   InvitationAlreadyAcceptedError,
+  lastSeenByEngagement,
+  markLastSeen,
   markOnboarded,
   resolveNotifiableRecipient,
   setNotificationsEnabled,
@@ -141,6 +144,21 @@ describe("Story 2.4 — pre-auth + scope-resolution reads", () => {
       .from(schema.clientAccess)
       .where(eq(schema.clientAccess.engagementId, ENG_A));
     expect(second.onboardedAt).toEqual(first.onboardedAt);
+  });
+
+  // Runs inside Story 2.4's describe (right after the access row exists) — the client-scoped RLS
+  // update path is verified early, before later tests accumulate connection state.
+  it("seen-by-client: markLastSeen stamps last_seen_at; the freelancer reads it (RLS-scoped) + via the map", async () => {
+    const clientCtx: TenantContext = {
+      tenantId: TENANT_A,
+      engagementId: ENG_A,
+      userId: "client_user",
+      role: "client",
+    };
+    await markLastSeen(clientCtx);
+    expect(await getEngagementLastSeen(ctxA(), ENG_A)).toBeInstanceOf(Date);
+    expect((await lastSeenByEngagement(ctxA())).get(ENG_A)).toBeInstanceOf(Date);
+    await expect(markLastSeen(ctxA())).resolves.toBeUndefined(); // freelancer ctx (no engagement) → no-op
   });
 });
 

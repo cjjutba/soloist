@@ -13,16 +13,15 @@ describe("realtime channel names", () => {
 });
 
 describe("buildCapability — the wire-access boundary", () => {
-  it("a client gets ONLY their user channel + their one engagement (subscribe-only, never publish/presence)", () => {
+  it("a client gets ONLY their user channel + their one engagement (subscribe/presence, never publish)", () => {
     const cap = buildCapability({ userId: "u1", engagementIds: [ENG_A] });
     expect(cap).toEqual({
       [userChannel("u1")]: ["subscribe"],
-      [engagementChannel(ENG_A)]: ["subscribe"],
+      [engagementChannel(ENG_A)]: ["subscribe", "presence"],
     });
-    // No other engagement, and least-privilege: no publish, no presence.
+    // No other engagement, and never publish (server-only).
     expect(cap[engagementChannel(ENG_B)]).toBeUndefined();
     expect(Object.values(cap).flat()).not.toContain("publish");
-    expect(Object.values(cap).flat()).not.toContain("presence");
   });
 
   it("a freelancer gets their user channel + each of their engagements — and nothing else", () => {

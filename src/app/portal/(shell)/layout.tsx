@@ -4,10 +4,11 @@ import { requireOnboardedClient } from "@/server/auth/session";
 import { resolveBrandingVars } from "@/server/branding/branding-vars";
 import { getBranding } from "@/server/db/repositories/branding.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
+import { RealtimeProvider } from "@/components/realtime/realtime-provider";
 import { isRealtimeConfigured } from "@/server/realtime/ably";
 import { NotificationToaster } from "./notification-toaster";
 import { PortalNav } from "./portal-nav";
-import { RealtimeProvider } from "./realtime-provider";
+import { PortalRealtime } from "./portal-realtime";
 
 // The Client Portal SHELL (Story 2.6) — header (brand + minimal nav) + single-column,
 // mobile-first content. Wraps only the post-Onboarding surfaces (Feed/Documents/
@@ -21,7 +22,8 @@ export default async function PortalShellLayout({ children }: { children: ReactN
   const tenantName = tenant?.name?.trim() || "Portal";
 
   return (
-    <RealtimeProvider userId={session.userId} enabled={isRealtimeConfigured()}>
+    <RealtimeProvider enabled={isRealtimeConfigured()}>
+      <PortalRealtime userId={session.userId} engagementId={session.engagementId} />
       <div className="min-h-dvh">
         <header className="sticky top-0 z-10 border-b border-border bg-background/85 backdrop-blur">
           <div className="mx-auto flex w-full max-w-2xl items-center justify-between gap-3 px-5 py-2">
