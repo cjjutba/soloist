@@ -1,0 +1,28 @@
+# Local development services for Soloist.
+# Mailpit is a local SMTP sink + web inbox — in dev, mail is routed here instead
+# of Resend (see src/server/email/mailer.ts). Prod keeps using the Resend SDK.
+#
+#   npm run mail        # start Mailpit (detached)
+#   npm run mail:stop   # stop it
+#   open http://localhost:8027   # web inbox
+#
+# Wire dev to it via .env.local: EMAIL_TRANSPORT=smtp, SMTP_HOST=localhost, SMTP_PORT=1027.
+#
+# Host ports are 8027/1027 (not Mailpit's default 8025/1025) to avoid colliding with other
+# local mail catchers on this machine (e.g. aurahire-mailpit on 1025/8025). The container
+# still listens on its internal defaults; only the published host port differs.
+
+services:
+  mailpit:
+    image: axllent/mailpit:latest
+    container_name: soloist-mailpit
+    restart: unless-stopped
+    ports:
+      - "8027:8025" # web UI / REST API  (host 8027 → container 8025)
+      - "1027:1025" # SMTP               (host 1027 → container 1025)
+    environment:
+      # Keep a bounded ring buffer; this is a throwaway dev sink.
+      MP_MAX_MESSAGES: 500
+      # Accept whatever creds (or none) the app sends — dev convenience only.
+      MP_SMTP_AUTH_ACCEPT_ANY: 1
+      MP_SMTP_AUTH_ALLOW_INSECURE: 1

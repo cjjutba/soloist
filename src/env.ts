@@ -31,6 +31,28 @@ const schema = z.object({
     z.string().default("onboarding@resend.dev"),
   ),
 
+  // Email transport selection (mailer port — src/server/email/mailer.ts). Optional; when
+  // unset the mailer INFERS: SMTP_HOST present → smtp, else RESEND_API_KEY present → resend,
+  // else console. Set explicitly to force one. Dev uses "smtp" → Mailpit; prod stays "resend".
+  EMAIL_TRANSPORT: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.enum(["resend", "smtp", "console"]).optional(),
+  ),
+  // SMTP transport (dev → Mailpit; `npm run mail`). Only HOST is needed to opt in; the rest
+  // default to this repo's Mailpit listener. PORT defaults to 1027 — the HOST port our
+  // docker-compose publishes (shifted off Mailpit's 1025 default to dodge a collision with
+  // other local mail catchers on the dev machine), so `SMTP_HOST` alone really is enough.
+  // SECURE coerces ONLY "true"/"1" to true (plain z.coerce.boolean would turn "false" into
+  // true), so it's false unless explicitly enabled.
+  SMTP_HOST: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  SMTP_PORT: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.coerce.number().int().positive().default(1027),
+  ),
+  SMTP_SECURE: z.preprocess((v) => v === "true" || v === "1", z.boolean()),
+  SMTP_USER: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+  SMTP_PASS: z.preprocess((v) => (v === "" ? undefined : v), z.string().optional()),
+
   // Vercel Blob — Tenant logos (Story 1.6). Optional: the accent contrast guard works
   // without it; only logo upload needs it. Vercel auto-injects this when a Blob store
   // is linked to the project.

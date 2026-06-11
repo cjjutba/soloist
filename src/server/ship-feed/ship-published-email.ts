@@ -1,19 +1,15 @@
 import { createElement } from "react";
 import { render } from "@react-email/components";
-import { Resend } from "resend";
-import { env } from "@/env";
+import { sendEmail } from "@/server/email/mailer";
 import { ShipPublishedEmail } from "@/emails/ship-published-email";
 import { SHIP_STATUS, toShipStatus } from "@/components/ui/ship-status";
 
-// Built once (the API key is a constant) — mirrors src/server/invitations/email.ts.
-const resend = env.RESEND_API_KEY ? new Resend(env.RESEND_API_KEY) : null;
-
 /**
- * Send the branded "new update" email to a Client (Story 3.6 fan-out). With a Resend key we send
- * the rendered React Email template (Tenant logo + accent, status emoji+label). Without a key: in
- * dev we log, in PRODUCTION we THROW — a dropped client ping must fail loudly so the Inngest
- * fan-out RETRIES it (NFR-4), not silently swallow it (same policy as auth/invitations email).
- * The status emoji/label/colors come from the SHIP_STATUS single source of truth.
+ * Send the branded "new update" email to a Client (Story 3.6 fan-out). Renders the React Email
+ * template (Tenant logo + accent, status emoji+label) and hands it to the mailer port (dev →
+ * Mailpit, prod → Resend). The mailer enforces loud-fail in production so a dropped client ping
+ * THROWS — letting the Inngest fan-out RETRY it (NFR-4) instead of swallowing it. The status
+ * emoji/label/colors come from the SHIP_STATUS single source of truth.
  */
 export async function sendShipPublishedEmail(data: {
   to: string;
@@ -28,14 +24,6 @@ export async function sendShipPublishedEmail(data: {
 }): Promise<void> {
   const { to, statusTag, title, summary, clientDisplayName, tenantName, logoUrl, accentHex, portalUrl } = data;
   const status = SHIP_STATUS[toShipStatus(statusTag)];
-
-  if (!resend) {
-    if (process.env.NODE_ENV === "production") {
-      throw new Error("RESEND_API_KEY is required to send the ship-published email in production.");
-    }
-    console.info(`[ship-published] ${status.label} for ${to}: ${title} → ${portalUrl}`);
-    return;
-  }
 
   const html = await render(
     createElement(ShipPublishedEmail, {
@@ -58,8 +46,7 @@ export async function sendShipPublishedEmail(data: {
     (summary ? `${summary}\n` : "") +
     `\nView it in your portal:\n${portalUrl}`;
 
-  await resend.emails.send({
-    from: env.EMAIL_FROM,
+  await sendEmail({
     to,
     subject: `New update from ${tenantName}: ${title}`,
     html,
