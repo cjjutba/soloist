@@ -23,6 +23,7 @@ import {
   listConnectionsForReconcile,
   markConnectionError,
   markConnectionPulled,
+  setProductionBranch,
 } from "../repositories/repo-connections.repository";
 import { createEngagement } from "../repositories/engagements.repository";
 import { provisionTenant } from "../repositories/tenants.repository";
@@ -113,7 +114,7 @@ describe("Story 3.2 — repo-connections repository", () => {
       repoFullName: "acme/resolve",
     });
     const hit = await findEngagementForRepo("acme/resolve");
-    expect(hit).toEqual({ tenantId: TENANT_A, engagementId: ENG_A });
+    expect(hit).toEqual({ tenantId: TENANT_A, engagementId: ENG_A, productionBranch: null });
 
     expect(await findEngagementForRepo("acme/never-connected")).toBeNull();
 
@@ -159,6 +160,30 @@ describe("Story 3.2 — repo-connections repository", () => {
 
     await disconnectRepo(ctxA(), c.id);
     expect((await listConnectionsForReconcile()).find((r) => r.id === c.id)).toBeUndefined();
+  });
+
+  it("production branch: connectRepo stores it, findEngagementForRepo returns it, setProductionBranch retargets it (RLS-scoped)", async () => {
+    const c = await connectRepo(ctxA(), {
+      engagementId: ENG_A,
+      ghInstallationId: "inst-1",
+      ghRepoId: "800",
+      repoFullName: "acme/prod-branch",
+      productionBranch: "release",
+    });
+    expect(c.productionBranch).toBe("release");
+    expect(await findEngagementForRepo("acme/prod-branch")).toEqual({
+      tenantId: TENANT_A,
+      engagementId: ENG_A,
+      productionBranch: "release",
+    });
+
+    // Owner retargets it.
+    const updated = await setProductionBranch(ctxA(), c.id, "main");
+    expect(updated?.productionBranch).toBe("main");
+
+    // Another Tenant can't retarget it (RLS → 0 rows → null), and the value is unchanged.
+    expect(await setProductionBranch(ctxB(), c.id, "hacked")).toBeNull();
+    expect((await getConnection(ctxA(), c.id))?.productionBranch).toBe("main");
   });
 
   it("NFR-2: a Freelancer can't disconnect another Tenant's connection (RLS → null)", async () => {

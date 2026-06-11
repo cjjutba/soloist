@@ -5,6 +5,7 @@ import {
 } from "@/server/db/repositories/repo-connections.repository";
 import { createCandidate } from "@/server/db/repositories/ship-update.repository";
 import { pullRecentActivity } from "@/server/github/app";
+import { isProductionEvent } from "@/server/ship-feed/branch-filter";
 import { pulledActivityToEvents } from "@/server/ship-feed/github-pull";
 import { heuristicSummarizer } from "@/server/ship-feed/summarization";
 import { inngest } from "../client";
@@ -30,11 +31,14 @@ export async function pullAndRecordConnection(conn: {
   engagementId: string;
   ghInstallationId: string;
   repoFullName: string;
+  productionBranch: string | null;
 }): Promise<{ ok: boolean; candidates: number }> {
   try {
-    const activity = await pullRecentActivity(conn.ghInstallationId, conn.repoFullName);
+    const activity = await pullRecentActivity(conn.ghInstallationId, conn.repoFullName, conn.productionBranch);
     let candidates = 0;
     for (const event of pulledActivityToEvents(conn.repoFullName, activity)) {
+      // Same production-branch gate as the webhook (parity): drop off-branch pushes / non-prod PRs.
+      if (!isProductionEvent(event, conn.productionBranch)) continue;
       const summary = heuristicSummarizer.mapEvent(event);
       const created = await createCandidate(
         { tenantId: conn.tenantId, userId: "system", role: "freelancer" },

@@ -9,8 +9,10 @@ const m = vi.hoisted(() => ({
   connectRepo: vi.fn(),
   disconnectRepo: vi.fn(),
   getConnection: vi.fn(),
+  setProductionBranch: vi.fn(),
   listInstallationIds: vi.fn(),
   listReposForInstallations: vi.fn(),
+  listBranches: vi.fn(),
   pullAndRecordConnection: vi.fn(),
 }));
 
@@ -23,14 +25,24 @@ vi.mock("@/server/db/repositories/repo-connections.repository", () => ({
   connectRepo: m.connectRepo,
   disconnectRepo: m.disconnectRepo,
   getConnection: m.getConnection,
+  setProductionBranch: m.setProductionBranch,
 }));
-vi.mock("@/server/github/app", () => ({ listReposForInstallations: m.listReposForInstallations }));
+vi.mock("@/server/github/app", () => ({
+  listReposForInstallations: m.listReposForInstallations,
+  listBranches: m.listBranches,
+}));
 vi.mock("@/server/inngest/functions/reconcile-repos", () => ({
   pullAndRecordConnection: m.pullAndRecordConnection,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
 
-import { connectRepoAction, disconnectRepoAction, retryConnectionAction } from "../repo-connections.actions";
+import {
+  connectRepoAction,
+  disconnectRepoAction,
+  listRepoBranchesAction,
+  retryConnectionAction,
+  setProductionBranchAction,
+} from "../repo-connections.actions";
 
 const REPO = { installationId: "555", repoId: "100", fullName: "cjjutba/soloist", private: false };
 
@@ -48,8 +60,11 @@ beforeEach(() => {
     engagementId: ENG,
     ghInstallationId: "555",
     repoFullName: "cjjutba/soloist",
+    productionBranch: "main",
     status: "error",
   });
+  m.setProductionBranch.mockResolvedValue({ id: CONN, engagementId: ENG, productionBranch: "main" });
+  m.listBranches.mockResolvedValue({ branches: ["main", "dev"], defaultBranch: "main" });
   m.pullAndRecordConnection.mockResolvedValue({ ok: true, candidates: 1 });
 });
 
@@ -62,7 +77,17 @@ describe("Story 3.2 — connect/disconnect actions", () => {
       ghInstallationId: "555",
       ghRepoId: "100",
       repoFullName: "cjjutba/soloist",
+      productionBranch: null,
     });
+  });
+
+  it("connect with a chosen production branch passes it through", async () => {
+    const res = await connectRepoAction({ engagementId: ENG, repoFullName: "cjjutba/soloist", productionBranch: "release" });
+    expect(res).toEqual({ ok: true });
+    expect(m.connectRepo).toHaveBeenCalledWith(
+      m.ctx,
+      expect.objectContaining({ productionBranch: "release" }),
+    );
   });
 
   it("a repo not available to the App → error, no insert", async () => {
@@ -114,6 +139,7 @@ describe("Story 3.9 — retryConnectionAction", () => {
       engagementId: ENG,
       ghInstallationId: "555",
       repoFullName: "cjjutba/soloist",
+      productionBranch: "main",
     });
   });
 
@@ -141,5 +167,40 @@ describe("Story 3.9 — retryConnectionAction", () => {
     const res = await retryConnectionAction({ engagementId: "nope", connectionId: CONN });
     expect(res.ok).toBe(false);
     expect(m.getConnection).not.toHaveBeenCalled();
+  });
+});
+
+describe("production branch — listRepoBranchesAction", () => {
+  it("returns the repo's branches (scoped to the caller's installation)", async () => {
+    const res = await listRepoBranchesAction({ engagementId: ENG, repoFullName: "cjjutba/soloist" });
+    expect(res).toEqual({ ok: true, branches: ["main", "dev"], defaultBranch: "main" });
+    expect(m.listBranches).toHaveBeenCalledWith("555", "cjjutba/soloist");
+  });
+
+  it("a repo not available to the caller's installation → error, no branch fetch", async () => {
+    m.listReposForInstallations.mockResolvedValue([REPO]);
+    const res = await listRepoBranchesAction({ engagementId: ENG, repoFullName: "someone/else" });
+    expect(res.ok).toBe(false);
+    expect(m.listBranches).not.toHaveBeenCalled();
+  });
+});
+
+describe("production branch — setProductionBranchAction", () => {
+  it("retargets the caller's connection and returns ok", async () => {
+    const res = await setProductionBranchAction({ engagementId: ENG, connectionId: CONN, productionBranch: "main" });
+    expect(res).toEqual({ ok: true });
+    expect(m.setProductionBranch).toHaveBeenCalledWith(m.ctx, CONN, "main");
+  });
+
+  it("a foreign/gone connection (RLS → null) → error", async () => {
+    m.setProductionBranch.mockResolvedValue(null);
+    const res = await setProductionBranchAction({ engagementId: ENG, connectionId: CONN, productionBranch: "main" });
+    expect(res).toEqual({ ok: false, error: "That connection no longer exists." });
+  });
+
+  it("an empty branch → validation error, no write", async () => {
+    const res = await setProductionBranchAction({ engagementId: ENG, connectionId: CONN, productionBranch: "  " });
+    expect(res.ok).toBe(false);
+    expect(m.setProductionBranch).not.toHaveBeenCalled();
   });
 });

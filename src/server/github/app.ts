@@ -19,11 +19,12 @@ export type ConnectableRepo = {
 };
 
 /** What the reconciliation cron pulls from a connected repo (Story 3.3) — the recent activity the
- * mapper turns into candidates. Only qualifying items (merged/open PRs, published releases, the
- * default-branch head commit) are included. */
+ * mapper turns into candidates. `defaultBranch` is the repo's GitHub default (the filter's fallback
+ * when no production branch is set); `pulls[].base` is each PR's target branch (production filter). */
 export type PulledActivity = {
+  defaultBranch: string | null;
   headCommit?: { sha: string; message: string; branch: string };
-  pulls: { number: number; title: string; merged: boolean; branch: string; headSha: string }[];
+  pulls: { number: number; title: string; merged: boolean; branch: string; base: string; headSha: string }[];
   releases: { tag: string; name: string | null }[];
 };
 
@@ -123,15 +124,18 @@ export async function getUserInstallations(
 
 /**
  * Pull a connected repo's recent activity for the reconciliation cron (Story 3.3). Mints a
- * short-lived installation token and fetches the default-branch head commit, recent merged/open
- * PRs, and published releases. Each fetch is isolated (a missing scope / 404 on one doesn't lose
- * the others); a fully-unreachable repo throws to the caller, which marks the connection `error`.
+ * short-lived installation token and fetches the PRODUCTION-branch head commit (the explicit
+ * `productionBranch`, else the repo's GitHub default), recent merged/open PRs, and published
+ * releases. Each fetch is isolated (a missing scope / 404 on one doesn't lose the others); a
+ * fully-unreachable repo throws to the caller, which marks the connection `error`. The
+ * production-branch FILTER (drop off-branch pushes / non-prod-base PRs) runs in the caller.
  */
 export async function pullRecentActivity(
   installationId: string,
   repoFullName: string,
+  productionBranch?: string | null,
 ): Promise<PulledActivity> {
-  const out: PulledActivity = { pulls: [], releases: [] };
+  const out: PulledActivity = { defaultBranch: null, pulls: [], releases: [] };
   const app = getApp();
   if (!app || !/^\d+$/.test(installationId)) return out;
   const [owner, repo] = repoFullName.split("/");
@@ -142,9 +146,10 @@ export async function pullRecentActivity(
   // lost access — let it THROW so the cron marks the connection `error`, not a false-success empty
   // pull. (The sub-fetches below are best-effort: a repo with no commits/PRs/releases is normal.)
   const { data: repoData } = await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
-  const branch = repoData.default_branch;
+  out.defaultBranch = repoData.default_branch;
+  const branch = productionBranch ?? repoData.default_branch; // poll the production branch's head
 
-  // Default-branch head commit → a push-equivalent keyed by its SHA (matches the webhook's `after`).
+  // Production-branch head commit → a push-equivalent keyed by its SHA (matches the webhook's `after`).
   try {
     const { data: commits } = await octokit.request("GET /repos/{owner}/{repo}/commits", {
       owner,
@@ -155,7 +160,7 @@ export async function pullRecentActivity(
     const head = commits[0];
     if (head) out.headCommit = { sha: head.sha, message: head.commit.message, branch };
   } catch {
-    /* no commits on the default branch — skip the push signal */
+    /* no commits on the production branch — skip the push signal */
   }
 
   // Merged + open PRs (open-but-draft and closed-unmerged are dropped by the mapper's filter).
@@ -177,6 +182,7 @@ export async function pullRecentActivity(
           title: pr.title,
           merged,
           branch: pr.head.ref,
+          base: pr.base.ref,
           headSha: pr.head.sha,
         });
       }
@@ -200,4 +206,39 @@ export async function pullRecentActivity(
   }
 
   return out;
+}
+
+/**
+ * List a repo's branches (for the production-branch picker). Mints a short-lived installation
+ * token (the caller scopes it to the Tenant's own installation). The repo's default branch is
+ * returned and placed FIRST so the picker can default to it. Lets errors throw — the action
+ * catches and degrades. Capped at 500 branches (5 pages) — more than any real repo needs here.
+ */
+export async function listBranches(
+  installationId: string,
+  repoFullName: string,
+): Promise<{ branches: string[]; defaultBranch: string | null }> {
+  const app = getApp();
+  if (!app || !/^\d+$/.test(installationId)) return { branches: [], defaultBranch: null };
+  const [owner, repo] = repoFullName.split("/");
+  if (!owner || !repo) return { branches: [], defaultBranch: null };
+  const octokit = await app.getInstallationOctokit(Number(installationId));
+
+  const { data: repoData } = await octokit.request("GET /repos/{owner}/{repo}", { owner, repo });
+  const defaultBranch = repoData.default_branch;
+
+  const names: string[] = [];
+  for (let page = 1; page <= 5; page += 1) {
+    const { data } = await octokit.request("GET /repos/{owner}/{repo}/branches", {
+      owner,
+      repo,
+      per_page: 100,
+      page,
+    });
+    for (const b of data) names.push(b.name);
+    if (data.length < 100) break;
+  }
+  // Default first, then the rest (deduped) — a sensible picker order.
+  const branches = [defaultBranch, ...names.filter((b) => b !== defaultBranch)];
+  return { branches, defaultBranch };
 }

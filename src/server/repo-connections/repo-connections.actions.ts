@@ -8,16 +8,22 @@ import {
   connectRepo,
   disconnectRepo,
   getConnection,
+  setProductionBranch,
 } from "@/server/db/repositories/repo-connections.repository";
-import { listReposForInstallations } from "@/server/github/app";
+import { listBranches, listReposForInstallations } from "@/server/github/app";
 import { pullAndRecordConnection } from "@/server/inngest/functions/reconcile-repos";
 import {
   connectRepoSchema,
   disconnectRepoSchema,
+  listRepoBranchesSchema,
   retryConnectionSchema,
+  setProductionBranchSchema,
 } from "./repo-connections.schema";
 
 export type RepoConnectionResult = { ok: true } | { ok: false; error: string };
+export type ListBranchesResult =
+  | { ok: true; branches: string[]; defaultBranch: string | null }
+  | { ok: false; error: string };
 
 const reposPath = (engagementId: string) => `/app/engagements/${engagementId}/repos`;
 
@@ -27,6 +33,7 @@ const reposPath = (engagementId: string) => `/app/engagements/${engagementId}/re
 export async function connectRepoAction(input: {
   engagementId: string;
   repoFullName: string;
+  productionBranch?: string;
 }): Promise<RepoConnectionResult> {
   const ctx = await requireFreelancer();
 
@@ -34,7 +41,7 @@ export async function connectRepoAction(input: {
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
   }
-  const { engagementId, repoFullName } = parsed.data;
+  const { engagementId, repoFullName, productionBranch } = parsed.data;
 
   try {
     const engagement = await getEngagement(ctx, engagementId);
@@ -55,6 +62,7 @@ export async function connectRepoAction(input: {
       ghInstallationId: match.installationId,
       ghRepoId: match.repoId,
       repoFullName: match.fullName,
+      productionBranch: productionBranch ?? null,
     });
     revalidatePath(reposPath(engagementId));
     return { ok: true };
@@ -124,6 +132,7 @@ export async function retryConnectionAction(input: {
       engagementId: conn.engagementId,
       ghInstallationId: conn.ghInstallationId,
       repoFullName: conn.repoFullName,
+      productionBranch: conn.productionBranch,
     });
     // Revalidate the connection's OWN engagement page (not the request's), so the right card refreshes.
     revalidatePath(reposPath(conn.engagementId));
@@ -136,6 +145,71 @@ export async function retryConnectionAction(input: {
       err instanceof Error ? err.message : String(err),
     );
     return { ok: false, error: "Couldn't retry that connection. Please try again." };
+  }
+}
+
+/** List a repo's branches for the production-branch picker. Scoped to the caller Tenant's OWN
+ * installations (Story 3.2.1) — the repo must be available to one of them, so a branch list is
+ * never fetched for another Tenant's repo. Degrades to an error result if GitHub is unreachable. */
+export async function listRepoBranchesAction(input: {
+  engagementId: string;
+  repoFullName: string;
+}): Promise<ListBranchesResult> {
+  const ctx = await requireFreelancer();
+
+  const parsed = listRepoBranchesSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+  }
+  const { repoFullName } = parsed.data;
+
+  try {
+    const installationIds = await listInstallationIds(ctx);
+    const match = (await listReposForInstallations(installationIds)).find(
+      (r) => r.fullName === repoFullName,
+    );
+    if (!match) {
+      return { ok: false, error: "That repo isn't available to the app — is it still installed?" };
+    }
+    const { branches, defaultBranch } = await listBranches(match.installationId, repoFullName);
+    return { ok: true, branches, defaultBranch };
+  } catch (err) {
+    console.error(
+      "[repo-connections] listRepoBranchesAction failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return { ok: false, error: "Couldn't load branches from GitHub. Please try again." };
+  }
+}
+
+/** Retarget a connection's production branch (the branch whose activity feeds the feed). The
+ * RLS-scoped `setProductionBranch` means a freelancer can only retarget their own connection. */
+export async function setProductionBranchAction(input: {
+  engagementId: string;
+  connectionId: string;
+  productionBranch: string;
+}): Promise<RepoConnectionResult> {
+  const ctx = await requireFreelancer();
+
+  const parsed = setProductionBranchSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Check the form and try again." };
+  }
+  const { connectionId, productionBranch } = parsed.data;
+
+  try {
+    const row = await setProductionBranch(ctx, connectionId, productionBranch);
+    if (!row) return { ok: false, error: "That connection no longer exists." };
+    // Revalidate the connection's OWN engagement page (from the returned row), not the
+    // client-supplied engagementId — so the correct Repos tab refreshes.
+    revalidatePath(reposPath(row.engagementId));
+    return { ok: true };
+  } catch (err) {
+    console.error(
+      "[repo-connections] setProductionBranchAction failed:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return { ok: false, error: "Couldn't update the production branch. Please try again." };
   }
 }
 

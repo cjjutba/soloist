@@ -10,6 +10,6 @@ import { findEngagementForRepo } from "@/server/db/repositories/repo-connections
  */
 export async function resolveEngagementForRepo(
   repoFullName: string,
-): Promise<{ tenantId: string; engagementId: string } | null> {
+): Promise<{ tenantId: string; engagementId: string; productionBranch: string | null } | null> {
   return findEngagementForRepo(repoFullName);
 }

@@ -24,6 +24,7 @@ import {
   getUserInstallations,
   isGithubConfigured,
   isOauthConfigured,
+  listBranches,
   listReposForInstallations,
   pullRecentActivity,
 } from "../app";
@@ -108,9 +109,9 @@ describe("Story 3.2.1 — GitHub App client (scoped listing + OAuth verification
       if (route === "GET /repos/{owner}/{repo}/pulls")
         return Promise.resolve({
           data: [
-            { number: 7, title: "Merged", merged_at: "2026-01-01", state: "closed", draft: false, head: { ref: "b1", sha: "s1" } },
-            { number: 8, title: "Open", merged_at: null, state: "open", draft: false, head: { ref: "b2", sha: "s2" } },
-            { number: 9, title: "Draft", merged_at: null, state: "open", draft: true, head: { ref: "b3", sha: "s3" } },
+            { number: 7, title: "Merged", merged_at: "2026-01-01", state: "closed", draft: false, head: { ref: "b1", sha: "s1" }, base: { ref: "main" } },
+            { number: 8, title: "Open", merged_at: null, state: "open", draft: false, head: { ref: "b2", sha: "s2" }, base: { ref: "main" } },
+            { number: 9, title: "Draft", merged_at: null, state: "open", draft: true, head: { ref: "b3", sha: "s3" }, base: { ref: "main" } },
           ],
         });
       if (route === "GET /repos/{owner}/{repo}/releases")
@@ -124,16 +125,55 @@ describe("Story 3.2.1 — GitHub App client (scoped listing + OAuth verification
     });
 
     const a = await pullRecentActivity("555", "cj/soloist");
+    expect(a.defaultBranch).toBe("main");
     expect(a.headCommit).toEqual({ sha: "abc", message: "Ship", branch: "main" });
     expect(a.pulls.map((p) => p.number)).toEqual([7, 8]); // draft PR dropped
-    expect(a.pulls[0]).toMatchObject({ merged: true, branch: "b1", headSha: "s1" });
+    expect(a.pulls[0]).toMatchObject({ merged: true, branch: "b1", base: "main", headSha: "s1" });
     expect(a.releases.map((r) => r.tag)).toEqual(["v1"]); // draft release dropped
   });
 
+  it("pullRecentActivity polls the PRODUCTION branch's head when one is given", async () => {
+    configureApp();
+    const calls: Array<{ route: string; sha?: string }> = [];
+    m.request.mockImplementation((route: string, opts: { sha?: string }) => {
+      calls.push({ route, sha: opts?.sha });
+      if (route === "GET /repos/{owner}/{repo}") return Promise.resolve({ data: { default_branch: "main" } });
+      if (route === "GET /repos/{owner}/{repo}/commits")
+        return Promise.resolve({ data: [{ sha: "z", commit: { message: "m" } }] });
+      return Promise.resolve({ data: [] });
+    });
+
+    const a = await pullRecentActivity("555", "cj/soloist", "release/2.0");
+    expect(a.defaultBranch).toBe("main"); // still reports the repo default (the filter's fallback)
+    expect(a.headCommit?.branch).toBe("release/2.0"); // but the polled head is the production branch
+    const commitCall = calls.find((c) => c.route === "GET /repos/{owner}/{repo}/commits");
+    expect(commitCall?.sha).toBe("release/2.0");
+  });
+
   it("pullRecentActivity returns empty when the app is unconfigured / id non-numeric", async () => {
-    expect(await pullRecentActivity("555", "cj/x")).toEqual({ pulls: [], releases: [] });
+    expect(await pullRecentActivity("555", "cj/x")).toEqual({ defaultBranch: null, pulls: [], releases: [] });
     expect(m.request).not.toHaveBeenCalled();
     configureApp();
-    expect(await pullRecentActivity("not-a-number", "cj/x")).toEqual({ pulls: [], releases: [] });
+    expect(await pullRecentActivity("not-a-number", "cj/x")).toEqual({ defaultBranch: null, pulls: [], releases: [] });
+  });
+
+  it("listBranches returns the repo's branches with the default branch first", async () => {
+    configureApp();
+    m.request.mockImplementation((route: string) => {
+      if (route === "GET /repos/{owner}/{repo}") return Promise.resolve({ data: { default_branch: "main" } });
+      if (route === "GET /repos/{owner}/{repo}/branches")
+        return Promise.resolve({ data: [{ name: "dev" }, { name: "main" }, { name: "feat/x" }] });
+      return Promise.resolve({ data: [] });
+    });
+    const { branches, defaultBranch } = await listBranches("555", "cj/soloist");
+    expect(defaultBranch).toBe("main");
+    expect(branches[0]).toBe("main"); // default first
+    expect(branches).toEqual(["main", "dev", "feat/x"]);
+  });
+
+  it("listBranches returns empty for a non-numeric installation id (can't mint a token)", async () => {
+    configureApp();
+    expect(await listBranches("not-a-number", "cj/x")).toEqual({ branches: [], defaultBranch: null });
+    expect(m.request).not.toHaveBeenCalled();
   });
 });

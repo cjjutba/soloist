@@ -1,6 +1,7 @@
 import { Card } from "@/components/ui/card";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { DisconnectButton } from "./disconnect-button";
+import { ProductionBranchControl } from "./production-branch-control";
 import { RetryButton } from "./retry-button";
 
 /** Structural shape (avoids importing the schema type, which the data-access ESLint guard
@@ -9,6 +10,7 @@ type ConnRow = {
   id: string;
   repoFullName: string;
   status: string;
+  productionBranch: string | null;
   lastPullAt: Date | null;
   lastError: string | null;
 };
@@ -44,6 +46,14 @@ export function RepoConnectionCard({
         </span>
         {connection.status === "error" && connection.lastError ? (
           <span className="text-xs text-destructive">{connection.lastError}</span>
+        ) : null}
+        {isActive ? (
+          <ProductionBranchControl
+            engagementId={engagementId}
+            connectionId={connection.id}
+            repoFullName={connection.repoFullName}
+            productionBranch={connection.productionBranch}
+          />
         ) : null}
       </div>
       {isActive ? (

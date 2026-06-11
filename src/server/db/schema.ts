@@ -276,6 +276,10 @@ export const repoConnections = pgTable(
     ghInstallationId: text("gh_installation_id").notNull(),
     ghRepoId: text("gh_repo_id").notNull(),
     repoFullName: text("repo_full_name").notNull(),
+    // The branch whose activity feeds the Ship Feed (the "production branch"). NULL = fall back
+    // to the repo's GitHub default branch at ingestion. Only pushes to / PRs merged into this
+    // branch (+ releases) become candidates — keeps feature-branch noise out of the feed.
+    productionBranch: text("production_branch"),
     // connected | pulling | error | disconnected. 3.2 reaches connected/disconnected;
     // pulling/error + last_pull_at/last_error are driven by Story 3.3's pull + reconciliation.
     status: text("status").notNull().default("connected"),

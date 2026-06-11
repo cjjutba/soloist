@@ -22,6 +22,7 @@ export function pulledActivityToEvents(
       repoFullName,
       sourceEventKey: `push:${repoFullName}:${sha}`,
       branch,
+      defaultBranch: pulled.defaultBranch,
       commitCount: 1,
       headCommitMessage: message ? message.split("\n")[0].trim() : null,
       rawMeta: { after: sha, ref: `refs/heads/${branch}`, commitCount: 1 },
@@ -39,7 +40,9 @@ export function pulledActivityToEvents(
       title: pr.title,
       merged: pr.merged,
       branch: pr.branch,
-      rawMeta: { number: pr.number, branch: pr.branch, headSha: pr.headSha },
+      baseBranch: pr.base,
+      defaultBranch: pulled.defaultBranch,
+      rawMeta: { number: pr.number, branch: pr.branch, baseBranch: pr.base, headSha: pr.headSha },
     });
   }
 
@@ -51,6 +54,7 @@ export function pulledActivityToEvents(
       sourceEventKey: `release:${repoFullName}:${rel.tag}`,
       tag: rel.tag,
       name: rel.name,
+      defaultBranch: pulled.defaultBranch,
       rawMeta: { tag: rel.tag },
     });
   }

@@ -44,7 +44,13 @@ export async function getConnection(ctx: TenantContext, connectionId: string): P
  * is NULL), so the engagement-ownership gate lives in the action, not the policy. */
 export async function connectRepo(
   ctx: TenantContext,
-  input: { engagementId: string; ghInstallationId: string; ghRepoId: string; repoFullName: string },
+  input: {
+    engagementId: string;
+    ghInstallationId: string;
+    ghRepoId: string;
+    repoFullName: string;
+    productionBranch?: string | null;
+  },
 ): Promise<RepoConnection> {
   const id = uuidv7();
   return withTenant(ctx, async (tx) => {
@@ -57,9 +63,28 @@ export async function connectRepo(
         ghInstallationId: input.ghInstallationId,
         ghRepoId: input.ghRepoId,
         repoFullName: input.repoFullName,
+        productionBranch: input.productionBranch ?? null,
       })
       .returning();
     return row;
+  });
+}
+
+/** Set the production branch a connection tracks (RLS-scoped → null if not the caller's, so a
+ * freelancer can only retarget their own). NULL falls the ingestion filter back to the repo's
+ * GitHub default branch. */
+export async function setProductionBranch(
+  ctx: TenantContext,
+  connectionId: string,
+  productionBranch: string,
+): Promise<RepoConnection | null> {
+  return withTenant(ctx, async (tx) => {
+    const [row] = await tx
+      .update(repoConnections)
+      .set({ productionBranch })
+      .where(eq(repoConnections.id, connectionId))
+      .returning();
+    return row ?? null;
   });
 }
 
@@ -88,11 +113,12 @@ export async function disconnectRepo(
  */
 export async function findEngagementForRepo(
   repoFullName: string,
-): Promise<{ tenantId: string; engagementId: string } | null> {
+): Promise<{ tenantId: string; engagementId: string; productionBranch: string | null } | null> {
   const rows = await db
     .select({
       tenantId: repoConnections.tenantId,
       engagementId: repoConnections.engagementId,
+      productionBranch: repoConnections.productionBranch,
     })
     .from(repoConnections)
     .where(
@@ -128,6 +154,7 @@ export async function listConnectionsForReconcile(): Promise<
     engagementId: string;
     ghInstallationId: string;
     repoFullName: string;
+    productionBranch: string | null;
     lastPullAt: Date | null;
   }[]
 > {
@@ -138,6 +165,7 @@ export async function listConnectionsForReconcile(): Promise<
       engagementId: repoConnections.engagementId,
       ghInstallationId: repoConnections.ghInstallationId,
       repoFullName: repoConnections.repoFullName,
+      productionBranch: repoConnections.productionBranch,
       lastPullAt: repoConnections.lastPullAt,
     })
     .from(repoConnections)

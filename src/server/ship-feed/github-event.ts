@@ -8,12 +8,17 @@
  * carries the raw payload detail (SHAs, diffs, full refs) kept off the founder-facing fields;
  * client exposure is gated at publish (3.7), not here.
  */
+// `defaultBranch` (the repo's GitHub default) rides on every event so the production-branch
+// filter can fall back to it when a connection has no explicit production branch — no extra
+// GitHub round-trip. For a PR, `baseBranch` is the branch it MERGES INTO (what "shipped to
+// production" keys on); `branch` stays the head/source branch (kept in rawMeta for context).
 export type NormalizedGithubEvent =
   | {
       kind: "push";
       repoFullName: string;
       sourceEventKey: string;
       branch: string;
+      defaultBranch: string | null;
       commitCount: number;
       headCommitMessage: string | null;
       rawMeta: Record<string, unknown>;
@@ -26,6 +31,8 @@ export type NormalizedGithubEvent =
       title: string;
       merged: boolean;
       branch: string;
+      baseBranch: string;
+      defaultBranch: string | null;
       rawMeta: Record<string, unknown>;
     }
   | {
@@ -34,6 +41,7 @@ export type NormalizedGithubEvent =
       sourceEventKey: string;
       tag: string;
       name: string | null;
+      defaultBranch: string | null;
       rawMeta: Record<string, unknown>;
     };
 
@@ -48,6 +56,7 @@ export function normalizeGithubEvent(
   const p = obj(payload);
   const repoFullName = str(obj(p.repository).full_name);
   if (!repoFullName) return null;
+  const defaultBranch = str(obj(p.repository).default_branch);
 
   if (eventType === "push") {
     const ref = str(p.ref) ?? "";
@@ -64,6 +73,7 @@ export function normalizeGithubEvent(
       repoFullName,
       sourceEventKey: `push:${repoFullName}:${after}`,
       branch,
+      defaultBranch,
       commitCount: commits.length,
       headCommitMessage: headCommitMessage ? headCommitMessage.split("\n")[0].trim() : null,
       rawMeta: { after, ref, commitCount: commits.length },
@@ -78,6 +88,7 @@ export function normalizeGithubEvent(
     if (number === null || !title) return null;
     const merged = pr.merged === true;
     const branch = str(obj(pr.head).ref) ?? "";
+    const baseBranch = str(obj(pr.base).ref) ?? "";
     // Qualifying: a newly opened PR, or a CLOSED-AND-MERGED PR. Ignore synchronize/reopen/
     // closed-without-merge noise.
     let phase: "opened" | "merged" | null = null;
@@ -92,7 +103,9 @@ export function normalizeGithubEvent(
       title,
       merged: phase === "merged",
       branch,
-      rawMeta: { number, branch, headSha: str(obj(pr.head).sha) },
+      baseBranch,
+      defaultBranch,
+      rawMeta: { number, branch, baseBranch, headSha: str(obj(pr.head).sha) },
     };
   }
 
@@ -107,6 +120,7 @@ export function normalizeGithubEvent(
       sourceEventKey: `release:${repoFullName}:${tag}`,
       tag,
       name: str(release.name),
+      defaultBranch,
       rawMeta: { tag },
     };
   }

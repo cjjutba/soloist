@@ -4,6 +4,7 @@ import {
 } from "@/server/db/repositories/github-installations.repository";
 import { createCandidate } from "@/server/db/repositories/ship-update.repository";
 import { markProcessed } from "@/server/db/repositories/webhook-event.repository";
+import { isProductionEvent } from "@/server/ship-feed/branch-filter";
 import { normalizeGithubEvent, parseInstallationDeleted } from "@/server/ship-feed/github-event";
 import { resolveEngagementForRepo } from "@/server/ship-feed/resolve-engagement";
 import { heuristicSummarizer } from "@/server/ship-feed/summarization";
@@ -11,7 +12,7 @@ import { inngest, type GithubEventReceived } from "../client";
 
 export type HandleResult =
   | { status: "candidate"; candidateId: string | null }
-  | { status: "skipped"; reason: "non-qualifying" | "no-engagement" }
+  | { status: "skipped"; reason: "non-qualifying" | "no-engagement" | "off-branch" }
   | { status: "uninstalled"; installationId: string };
 
 /**
@@ -43,6 +44,12 @@ export async function handleGithubEvent(data: GithubEventReceived): Promise<Hand
   if (!target) {
     await markProcessed(data.ghDeliveryId);
     return { status: "skipped", reason: "no-engagement" };
+  }
+
+  // Production-branch gate (Shipped-only): drop feature-branch pushes + non-prod-base / opened PRs.
+  if (!isProductionEvent(normalized, target.productionBranch)) {
+    await markProcessed(data.ghDeliveryId);
+    return { status: "skipped", reason: "off-branch" };
   }
 
   const summary = heuristicSummarizer.mapEvent(normalized);

@@ -20,14 +20,20 @@ vi.mock("../../client", () => ({ inngest: { createFunction: () => ({}) } }));
 
 import { handleGithubEvent } from "../process-github-event";
 
-const repo = { full_name: "cj/soloist" };
+const repo = { full_name: "cj/soloist", default_branch: "main" };
 const mergedPr = {
   ghDeliveryId: "d1",
   eventType: "pull_request",
   payload: {
     action: "closed",
     repository: repo,
-    pull_request: { number: 9, title: "Auth", merged: true, head: { ref: "feat/auth", sha: "deadbeef" } },
+    pull_request: {
+      number: 9,
+      title: "Auth",
+      merged: true,
+      head: { ref: "feat/auth", sha: "deadbeef" },
+      base: { ref: "main" },
+    },
   },
 };
 
@@ -35,7 +41,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   m.markProcessed.mockResolvedValue(undefined);
   m.createCandidate.mockResolvedValue({ id: "su1" });
-  m.resolveEngagementForRepo.mockResolvedValue({ tenantId: "t1", engagementId: "e1" });
+  m.resolveEngagementForRepo.mockResolvedValue({ tenantId: "t1", engagementId: "e1", productionBranch: "main" });
   m.removeInstallation.mockResolvedValue(1);
   m.disconnectByInstallation.mockResolvedValue(0);
 });
@@ -72,6 +78,45 @@ describe("handleGithubEvent (Story 3.1)", () => {
     m.resolveEngagementForRepo.mockResolvedValue(null);
     const r = await handleGithubEvent(mergedPr);
     expect(r).toEqual({ status: "skipped", reason: "no-engagement" });
+    expect(m.createCandidate).not.toHaveBeenCalled();
+  });
+
+  it("off the production branch (PR merged into a non-prod base) → skipped, no candidate", async () => {
+    const offBranch = {
+      ghDeliveryId: "d-off",
+      eventType: "pull_request",
+      payload: {
+        action: "closed",
+        repository: repo,
+        pull_request: {
+          number: 11,
+          title: "Into dev",
+          merged: true,
+          head: { ref: "feat/x", sha: "s" },
+          base: { ref: "dev" }, // production branch is "main"
+        },
+      },
+    };
+    const r = await handleGithubEvent(offBranch);
+    expect(r).toEqual({ status: "skipped", reason: "off-branch" });
+    expect(m.createCandidate).not.toHaveBeenCalled();
+    expect(m.markProcessed).toHaveBeenCalledWith("d-off");
+  });
+
+  it("a push to a feature branch → skipped (off-branch), only the production branch feeds the feed", async () => {
+    const featurePush = {
+      ghDeliveryId: "d-fp",
+      eventType: "push",
+      payload: {
+        repository: repo,
+        ref: "refs/heads/feat/login",
+        after: "abc123",
+        head_commit: { message: "wip" },
+        commits: [{}],
+      },
+    };
+    const r = await handleGithubEvent(featurePush);
+    expect(r).toEqual({ status: "skipped", reason: "off-branch" });
     expect(m.createCandidate).not.toHaveBeenCalled();
   });
 

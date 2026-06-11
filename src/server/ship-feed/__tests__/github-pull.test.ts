@@ -8,10 +8,11 @@ const repo = "cj/soloist";
 describe("Story 3.3 — pulledActivityToEvents", () => {
   it("produces source_event_keys IDENTICAL to the webhook normalizer (the dedup depends on it)", () => {
     const pulled: PulledActivity = {
+      defaultBranch: "main",
       headCommit: { sha: "abc123", message: "Add the login form\n\nbody", branch: "main" },
       pulls: [
-        { number: 7, title: "Dark mode", merged: true, branch: "feat/dark", headSha: "s1" },
-        { number: 9, title: "WIP", merged: false, branch: "feat/wip", headSha: "s2" },
+        { number: 7, title: "Dark mode", merged: true, branch: "feat/dark", base: "main", headSha: "s1" },
+        { number: 9, title: "WIP", merged: false, branch: "feat/wip", base: "main", headSha: "s2" },
       ],
       releases: [{ tag: "v1.2.0", name: "Winter" }],
     };
@@ -50,6 +51,7 @@ describe("Story 3.3 — pulledActivityToEvents", () => {
 
   it("keeps SHAs/branches in raw_meta, off the founder-facing fields", () => {
     const [push] = pulledActivityToEvents(repo, {
+      defaultBranch: "main",
       headCommit: { sha: "deadbeef", message: "Fix the thing", branch: "main" },
       pulls: [],
       releases: [],
@@ -59,7 +61,23 @@ describe("Story 3.3 — pulledActivityToEvents", () => {
     if (push.kind === "push") expect(push.headCommitMessage).toBe("Fix the thing");
   });
 
+  it("propagates defaultBranch + the PR base branch onto events (the production filter reads them)", () => {
+    const events = pulledActivityToEvents(repo, {
+      defaultBranch: "trunk",
+      headCommit: { sha: "h", message: "m", branch: "trunk" },
+      pulls: [{ number: 3, title: "PR", merged: true, branch: "feat/x", base: "trunk", headSha: "s" }],
+      releases: [],
+    });
+    const push = events.find((e) => e.kind === "push");
+    const prEvent = events.find((e) => e.kind === "pull_request");
+    expect(push?.defaultBranch).toBe("trunk");
+    if (prEvent?.kind === "pull_request") {
+      expect(prEvent.baseBranch).toBe("trunk");
+      expect(prEvent.defaultBranch).toBe("trunk");
+    }
+  });
+
   it("emits nothing for an empty pull", () => {
-    expect(pulledActivityToEvents(repo, { pulls: [], releases: [] })).toEqual([]);
+    expect(pulledActivityToEvents(repo, { defaultBranch: "main", pulls: [], releases: [] })).toEqual([]);
   });
 });

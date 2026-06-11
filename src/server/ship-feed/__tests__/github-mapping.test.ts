@@ -75,6 +75,30 @@ describe("normalizeGithubEvent + heuristicSummarizer", () => {
     expect(r?.sourceEventKey).toBe("release:cj/soloist:v1.2.0");
   });
 
+  it("captures the repo default branch + a PR's base branch (for the production filter)", () => {
+    const push = normalizeGithubEvent("push", {
+      repository: { full_name: repo.full_name, default_branch: "trunk" },
+      ref: "refs/heads/trunk",
+      after: "a",
+      head_commit: { message: "x" },
+      commits: [{}],
+    });
+    if (push?.kind === "push") {
+      expect(push.defaultBranch).toBe("trunk");
+      expect(push.branch).toBe("trunk");
+    }
+
+    const pr = normalizeGithubEvent("pull_request", {
+      action: "closed",
+      repository: { full_name: repo.full_name, default_branch: "trunk" },
+      pull_request: { number: 5, title: "t", merged: true, head: { ref: "feat/x", sha: "s" }, base: { ref: "trunk" } },
+    });
+    if (pr?.kind === "pull_request") {
+      expect(pr.baseBranch).toBe("trunk");
+      expect(pr.defaultBranch).toBe("trunk");
+    }
+  });
+
   it("the same logical event yields a STABLE sourceEventKey (idempotency)", () => {
     const e = { repository: repo, ref: "refs/heads/main", after: "deadbeef", head_commit: { message: "x" }, commits: [{}] };
     expect(normalizeGithubEvent("push", e)?.sourceEventKey).toBe(normalizeGithubEvent("push", e)?.sourceEventKey);

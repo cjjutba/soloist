@@ -25,6 +25,7 @@ type Conn = {
   engagementId: string;
   ghInstallationId: string;
   repoFullName: string;
+  productionBranch: string | null;
   lastPullAt: Date | null;
 };
 const conn = (over: Partial<Conn> = {}): Conn => ({
@@ -33,6 +34,7 @@ const conn = (over: Partial<Conn> = {}): Conn => ({
   engagementId: "e1",
   ghInstallationId: "555",
   repoFullName: "cj/x",
+  productionBranch: null,
   lastPullAt: null,
   ...over,
 });
@@ -48,8 +50,9 @@ describe("Story 3.3 — reconcileConnectedRepos", () => {
   it("pulls a connection, creates a scoped candidate per event, marks pulled", async () => {
     m.listConnectionsForReconcile.mockResolvedValue([conn()]);
     m.pullRecentActivity.mockResolvedValue({
+      defaultBranch: "main",
       headCommit: { sha: "abc", message: "Ship it", branch: "main" },
-      pulls: [{ number: 7, title: "PR", merged: true, branch: "b", headSha: "s" }],
+      pulls: [{ number: 7, title: "PR", merged: true, branch: "b", base: "main", headSha: "s" }],
       releases: [],
     });
     const r = await reconcileConnectedRepos();
@@ -70,7 +73,7 @@ describe("Story 3.3 — reconcileConnectedRepos", () => {
     m.pullRecentActivity.mockImplementation((_inst: string, repo: string) =>
       repo === "cj/bad"
         ? Promise.reject(Object.assign(new Error("Not Found"), { status: 404 }))
-        : Promise.resolve({ headCommit: { sha: "z", message: "m", branch: "main" }, pulls: [], releases: [] }),
+        : Promise.resolve({ defaultBranch: "main", headCommit: { sha: "z", message: "m", branch: "main" }, pulls: [], releases: [] }),
     );
     const r = await reconcileConnectedRepos();
     expect(m.markConnectionError).toHaveBeenCalledWith("bad", "GitHub returned 404");
@@ -81,6 +84,7 @@ describe("Story 3.3 — reconcileConnectedRepos", () => {
   it("a deduped candidate (createCandidate → null) isn't counted but the repo is still marked pulled", async () => {
     m.listConnectionsForReconcile.mockResolvedValue([conn()]);
     m.pullRecentActivity.mockResolvedValue({
+      defaultBranch: "main",
       headCommit: { sha: "abc", message: "x", branch: "main" },
       pulls: [],
       releases: [],
@@ -90,11 +94,32 @@ describe("Story 3.3 — reconcileConnectedRepos", () => {
     expect(r).toEqual({ pulled: 1, candidates: 0, errored: 0 });
     expect(m.markConnectionPulled).toHaveBeenCalledWith("c1");
   });
+
+  it("the production-branch filter drops a PR merged into a non-production branch (parity with the webhook)", async () => {
+    m.listConnectionsForReconcile.mockResolvedValue([conn({ productionBranch: "main" })]);
+    m.pullRecentActivity.mockResolvedValue({
+      defaultBranch: "main",
+      pulls: [
+        { number: 1, title: "into dev", merged: true, branch: "f1", base: "dev", headSha: "s1" }, // dropped
+        { number: 2, title: "into main", merged: true, branch: "f2", base: "main", headSha: "s2" }, // kept
+      ],
+      releases: [],
+    });
+    const r = await reconcileConnectedRepos();
+    expect(r).toEqual({ pulled: 1, candidates: 1, errored: 0 });
+    // Only the merge INTO the production branch became a candidate.
+    expect(m.createCandidate).toHaveBeenCalledTimes(1);
+    expect(m.createCandidate).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ sourceEventKey: "pr:cj/x:2:merged" }),
+    );
+  });
 });
 
 describe("Story 3.9 — pullAndRecordConnection (extracted; reused by the Retry)", () => {
   it("success → candidate created + markConnectionPulled + {ok:true}", async () => {
     m.pullRecentActivity.mockResolvedValue({
+      defaultBranch: "main",
       headCommit: { sha: "abc", message: "Ship it", branch: "main" },
       pulls: [],
       releases: [],
