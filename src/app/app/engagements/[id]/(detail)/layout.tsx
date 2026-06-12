@@ -7,6 +7,7 @@ import { StatusBadge } from "@/components/ui/badge";
 import { requireFreelancer } from "@/server/auth/session";
 import { getEngagementLastSeen } from "@/server/db/repositories/client-access.repository";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
+import { freelancerChatUnread } from "@/server/db/repositories/messages.repository";
 import { isRealtimeConfigured } from "@/server/realtime/ably";
 import { formatRelativeTime } from "@/lib/relative-time";
 import { isUuid } from "@/lib/uuid";
@@ -31,6 +32,7 @@ export default async function EngagementDetailLayout({
   const engagement = await getEngagement(ctx, id);
   if (!engagement) notFound(); // not the caller's (RLS → null) or gone → 404
   const lastSeen = await getEngagementLastSeen(ctx, id);
+  const messagesUnread = await freelancerChatUnread(ctx, id);
 
   return (
     <RealtimeProvider enabled={isRealtimeConfigured()}>
@@ -72,7 +74,7 @@ export default async function EngagementDetailLayout({
               ) : null}
             </div>
           </div>
-          <EngagementTabs id={engagement.id} />
+          <EngagementTabs id={engagement.id} messagesUnread={messagesUnread} />
         </header>
         {children}
       </main>

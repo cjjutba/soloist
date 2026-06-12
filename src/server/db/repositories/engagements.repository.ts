@@ -3,6 +3,7 @@ import { uuidv7 } from "uuidv7";
 import { withTenant, type TenantContext } from "../context";
 import { engagements, type Engagement } from "../schema";
 import { lastSeenByEngagement } from "./client-access.repository";
+import { freelancerChatUnreadByEngagement } from "./messages.repository";
 import { countCandidatesByEngagement } from "./ship-update.repository";
 
 // (Story 3.1's `findSpikeTargetEngagement` shortcut was removed in Story 3.2 — the repo →
@@ -14,6 +15,8 @@ export type DashboardEngagement = Engagement & {
   candidateCount: number;
   /** When the Client last opened the portal (null = never / no Client) — the "Client viewed X ago" hint. */
   lastSeenAt: Date | null;
+  /** Unread inbound (client→freelancer) chat messages — the "they're waiting on a reply" signal. */
+  chatUnreadCount: number;
 };
 
 /** Dashboard sort: last-activity (most recent first), then candidate-count (most first),
@@ -80,10 +83,12 @@ export async function listDashboard(ctx: TenantContext): Promise<DashboardEngage
   // Story 3.5: the real "needs attention" count — one grouped, RLS-scoped query (not N+1).
   const counts = await countCandidatesByEngagement(ctx);
   const lastSeen = await lastSeenByEngagement(ctx); // "Client viewed X ago" per engagement
+  const chatUnread = await freelancerChatUnreadByEngagement(ctx); // unread client messages per engagement
   const withCounts = rows.map((e) => ({
     ...e,
     candidateCount: counts.get(e.id) ?? 0,
     lastSeenAt: lastSeen.get(e.id) ?? null,
+    chatUnreadCount: chatUnread.get(e.id) ?? 0,
   }));
   return withCounts.sort(compareDashboard);
 }

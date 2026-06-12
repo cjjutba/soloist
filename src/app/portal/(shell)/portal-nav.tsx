@@ -7,6 +7,7 @@ import { Loader2, LogOut, Settings } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/server/auth/client";
+import { MessagesNavLink } from "./messages-nav-link";
 import { NotificationBell } from "./notification-bell";
 
 const FOCUS_RING =
@@ -16,7 +17,15 @@ const FOCUS_RING =
  * an avatar menu. Two destinations max + the bell + the avatar — no dashboards, no tabs.
  * Every control has a ≥44px hit area (`min-h-11`/`min-w-11`) + a visible focus ring. The
  * avatar wears the re-scoped `--primary` (Tenant accent) from the portal root. */
-export function PortalNav({ clientName, clientEmail }: { clientName: string; clientEmail: string }) {
+export function PortalNav({
+  clientName,
+  clientEmail,
+  engagementId,
+}: {
+  clientName: string;
+  clientEmail: string;
+  engagementId: string;
+}) {
   const pathname = usePathname();
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -75,6 +84,7 @@ export function PortalNav({ clientName, clientEmail }: { clientName: string; cli
     <nav aria-label="Portal" className="flex items-center gap-0.5">
       {navLink("/portal", "Updates")}
       {navLink("/portal/documents", "Documents")}
+      <MessagesNavLink engagementId={engagementId} />
       <NotificationBell />
 
       <div className="relative">

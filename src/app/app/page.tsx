@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { MessageCircle } from "lucide-react";
 import { buttonVariants } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { CandidateBadge, StatusBadge } from "@/components/ui/badge";
@@ -50,6 +51,15 @@ export default async function CockpitPage() {
                     <span className="truncate font-medium">{e.name}</span>
                     <StatusBadge status={e.status} />
                     <CandidateBadge count={e.candidateCount} />
+                    {e.chatUnreadCount > 0 ? (
+                      <span
+                        className="inline-flex items-center gap-1 rounded-full bg-[#5b5bd6] px-1.5 font-mono text-[10px] font-medium leading-4 text-white"
+                        aria-label={`${e.chatUnreadCount} unread message${e.chatUnreadCount === 1 ? "" : "s"}`}
+                      >
+                        <MessageCircle className="size-2.5" aria-hidden />
+                        {e.chatUnreadCount > 99 ? "99+" : e.chatUnreadCount}
+                      </span>
+                    ) : null}
                   </span>
                   <span className="flex items-center gap-2 text-sm text-muted-foreground">
                     <span className="truncate">{e.clientDisplayName}</span>

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { boolean, integer, jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, pgPolicy, pgTable, text, timestamp, unique, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { uuidv7 } from "uuidv7";
 import { user } from "./auth-schema";
 
@@ -105,6 +105,10 @@ export const engagements = pgTable(
     lastActivityAt: timestamp("last_activity_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
+    // Chat (realtime slice 3): when the Freelancer last read this Engagement's message thread.
+    // Drives the Freelancer-side unread badge + the Client-facing "Read" receipt. null = never.
+    // (The Client's twin cursor is client_access.chat_last_read_at.)
+    freelancerChatLastReadAt: timestamp("freelancer_chat_last_read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [
@@ -195,6 +199,10 @@ export const clientAccess = pgTable(
     // "Seen by client" (presence slice): when the Client last opened the portal feed. The
     // freelancer derives per-update "Seen" from it (published_at <= last_seen_at). null = never.
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    // Chat (realtime slice 3): when the Client last read the message thread. Drives the Client-side
+    // unread badge + the Freelancer-facing "Read" receipt. null = never. (The Freelancer's twin
+    // cursor is engagements.freelancer_chat_last_read_at.)
+    chatLastReadAt: timestamp("chat_last_read_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   () => [
@@ -452,6 +460,48 @@ export const invoices = pgTable(
   ],
 );
 
+/**
+ * A chat message in an Engagement's two-way thread (realtime slice 3). Sent by either the
+ * Freelancer or the Client; both read the same thread. **Dual-scope RLS + FORCE** — identical
+ * shape to `ship_updates`/`invoices`: the Freelancer is scoped by `tenant_id`, a Client
+ * additionally by `engagement_id`. `sender_role` identifies the author without a join (v1 is
+ * 1 freelancer ↔ 1 client per engagement). The body is plain text, rendered escaped; it is
+ * NEVER put on the realtime wire — a bare `message` signal nudges the other side to refetch
+ * through the RLS-protected `GET /api/chat/[engagementId]` ("signal, not data").
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id")
+      .primaryKey()
+      .$defaultFn(() => uuidv7()),
+    tenantId: uuid("tenant_id")
+      .notNull()
+      .references(() => tenants.id, { onDelete: "cascade" }),
+    engagementId: uuid("engagement_id")
+      .notNull()
+      .references(() => engagements.id, { onDelete: "cascade" }),
+    senderRole: text("sender_role").notNull(), // freelancer | client
+    // text FK → Better Auth user.id (text, no RLS — like client_access.user_id). The author.
+    senderUserId: text("sender_user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    // Thread reads are engagement-scoped + chronological — index the access path.
+    index("messages_engagement_created").on(t.engagementId, t.createdAt),
+    // Tenant-scoped for the Freelancer; engagement-scoped for a Client — same dual-scope shape
+    // as ship_updates/invoices/engagements.
+    pgPolicy("message_scope", {
+      for: "all",
+      using: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+      withCheck: sql`tenant_id = ${currentTenant} AND (${currentEngagement} IS NULL OR engagement_id = ${currentEngagement})`,
+    }),
+  ],
+);
+
 export type Tenant = typeof tenants.$inferSelect;
 export type Branding = typeof branding.$inferSelect;
 export type Engagement = typeof engagements.$inferSelect;
@@ -463,3 +513,4 @@ export type RepoConnection = typeof repoConnections.$inferSelect;
 export type GithubInstallation = typeof githubInstallations.$inferSelect;
 export type Notification = typeof notifications.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
+export type Message = typeof messages.$inferSelect;

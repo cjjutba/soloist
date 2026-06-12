@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import * as Ably from "ably";
 import { useQueryClient } from "@tanstack/react-query";
@@ -112,6 +112,75 @@ export function usePresenceEnter(channelName: string | null): void {
       channel.presence.leave().catch(() => {});
     };
   }, [client, channelName]);
+}
+
+/** A presence member: who they are (`clientId === userId`, set on the token) + their published
+ * presence `data` (chat uses `{ typing }`). */
+export type PresenceMember = { clientId: string; data: unknown };
+
+/** All presence members on a channel WITH their data — chat reads this for "other party online"
+ * and the typing indicator. Re-reads on any presence event. Empty until connected / realtime off. */
+export function usePresenceMembers(channelName: string | null): PresenceMember[] {
+  const client = useContext(AblyContext);
+  const [members, setMembers] = useState<PresenceMember[]>([]);
+
+  useEffect(() => {
+    if (!client || !channelName) return;
+    const channel = client.channels.get(channelName);
+    let active = true;
+    const refresh = async () => {
+      try {
+        const present = await channel.presence.get();
+        if (active) {
+          setMembers(
+            present
+              .map((m) => ({ clientId: m.clientId ?? "", data: m.data }))
+              .filter((m) => m.clientId),
+          );
+        }
+      } catch {
+        /* presence not available yet — ignore */
+      }
+    };
+    channel.presence
+      .subscribe(refresh)
+      .catch((e: unknown) => console.error("[realtime] presence subscribe:", e));
+    void refresh();
+    return () => {
+      active = false;
+      channel.presence.unsubscribe(refresh);
+    };
+  }, [client, channelName]);
+
+  return members;
+}
+
+/**
+ * Returns a stable setter to broadcast the caller's typing state via `presence.update({ typing })`
+ * (covered by the existing `presence` capability — no publish rights, no message body on the wire).
+ * Best-effort. On unmount it resets typing to false so the indicator never sticks.
+ *
+ * ⚠️ Ordering: a consumer that ALSO owns the presence entry (the freelancer's `usePresenceEnter`)
+ * must call `usePresenceEnter` BEFORE this hook, so React's LIFO cleanup runs this reset-to-false
+ * while still present, THEN the `leave()`. (Reset-after-leave would auto-re-enter and orphan presence.)
+ */
+export function usePresenceTyping(channelName: string | null): (typing: boolean) => void {
+  const client = useContext(AblyContext);
+
+  useEffect(() => {
+    return () => {
+      if (!client || !channelName) return;
+      client.channels.get(channelName).presence.update({ typing: false }).catch(() => {});
+    };
+  }, [client, channelName]);
+
+  return useCallback(
+    (typing: boolean) => {
+      if (!client || !channelName) return;
+      client.channels.get(channelName).presence.update({ typing }).catch(() => {});
+    },
+    [client, channelName],
+  );
 }
 
 /** The clientIds currently present on a channel (the freelancer's "● viewing now"). Re-reads on any

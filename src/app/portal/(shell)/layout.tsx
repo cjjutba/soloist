@@ -39,7 +39,11 @@ export default async function PortalShellLayout({ children }: { children: ReactN
                 <span className="font-display text-lg">{tenantName}</span>
               )}
             </Link>
-            <PortalNav clientName={session.name} clientEmail={session.email} />
+            <PortalNav
+              clientName={session.name}
+              clientEmail={session.email}
+              engagementId={session.engagementId}
+            />
           </div>
         </header>
         <main className="mx-auto w-full max-w-2xl px-5 py-8">{children}</main>
