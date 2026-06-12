@@ -11,6 +11,7 @@ const m = vi.hoisted(() => ({
   markInvoiceSent: vi.fn(),
   markInvoicePaid: vi.fn(),
   inngestSend: vi.fn(),
+  publishToEngagement: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -23,6 +24,7 @@ vi.mock("@/server/db/repositories/invoices.repository", () => ({
   markInvoicePaid: m.markInvoicePaid,
 }));
 vi.mock("@/server/inngest/client", () => ({ inngest: { send: m.inngestSend } }));
+vi.mock("@/server/realtime/publish", () => ({ publishToEngagement: m.publishToEngagement }));
 vi.mock("@sentry/nextjs", () => ({ captureException: vi.fn() }));
 vi.mock("next/cache", () => ({ revalidatePath: m.revalidatePath }));
 
@@ -43,6 +45,7 @@ beforeEach(() => {
   m.markInvoiceSent.mockResolvedValue({ id: "inv-1", engagementId: ENG, tenantId: "t1", status: "sent" });
   m.markInvoicePaid.mockResolvedValue({ id: "inv-1", engagementId: ENG, status: "paid" });
   m.inngestSend.mockResolvedValue(undefined);
+  m.publishToEngagement.mockResolvedValue(undefined);
 });
 
 describe("Story 5.1 — createInvoiceAction", () => {
@@ -121,6 +124,7 @@ describe("Story 5.2 — sendInvoiceAction", () => {
       }),
     );
     expect(m.revalidatePath).toHaveBeenCalledWith(`/app/engagements/${ENG}/documents`);
+    expect(m.publishToEngagement).toHaveBeenCalledWith(ENG, "invoice.updated"); // live sync nudge
   });
 
   it("LOAD-BEARING GUARD: getInvoice null → {ok:false}, no transition/emit", async () => {
@@ -129,6 +133,7 @@ describe("Story 5.2 — sendInvoiceAction", () => {
     expect(res.ok).toBe(false);
     expect(m.markInvoiceSent).not.toHaveBeenCalled();
     expect(m.inngestSend).not.toHaveBeenCalled();
+    expect(m.publishToEngagement).not.toHaveBeenCalled();
   });
 
   it("LOAD-BEARING GUARD: an engagementId mismatch (URL tamper) → {ok:false}, no transition", async () => {
@@ -136,6 +141,7 @@ describe("Story 5.2 — sendInvoiceAction", () => {
     const res = await sendInvoiceAction(sendInput());
     expect(res.ok).toBe(false);
     expect(m.markInvoiceSent).not.toHaveBeenCalled();
+    expect(m.publishToEngagement).not.toHaveBeenCalled();
   });
 
   it("a non-draft invoice → {ok:false}, no transition/emit", async () => {
@@ -146,11 +152,12 @@ describe("Story 5.2 — sendInvoiceAction", () => {
     expect(m.inngestSend).not.toHaveBeenCalled();
   });
 
-  it("a lost race (markInvoiceSent → null) → {ok:false}, NO emit", async () => {
+  it("a lost race (markInvoiceSent → null) → {ok:false}, NO emit, NO realtime nudge", async () => {
     m.markInvoiceSent.mockResolvedValue(null);
     const res = await sendInvoiceAction(sendInput());
     expect(res.ok).toBe(false);
     expect(m.inngestSend).not.toHaveBeenCalled();
+    expect(m.publishToEngagement).not.toHaveBeenCalled();
   });
 
   it("rejects a non-uuid invoiceId before any repo call", async () => {
@@ -163,20 +170,22 @@ describe("Story 5.2 — sendInvoiceAction", () => {
 describe("Story 5.2 — markInvoicePaidAction", () => {
   const paidInput = () => ({ invoiceId: INV_ID, engagementId: ENG });
 
-  it("happy path: sent → paid, revalidates, fires NO event (Paid is out-of-band)", async () => {
+  it("happy path: sent → paid, revalidates, fires NO Inngest event (Paid is out-of-band) but DOES nudge live", async () => {
     m.getInvoice.mockResolvedValue({ id: "inv-1", engagementId: ENG, status: "sent" });
     const res = await markInvoicePaidAction(paidInput());
     expect(res).toEqual({ ok: true });
     expect(m.markInvoicePaid).toHaveBeenCalledWith(m.ctx, INV_ID);
-    expect(m.inngestSend).not.toHaveBeenCalled();
+    expect(m.inngestSend).not.toHaveBeenCalled(); // no email/notification fan-out
     expect(m.revalidatePath).toHaveBeenCalledWith(`/app/engagements/${ENG}/documents`);
+    expect(m.publishToEngagement).toHaveBeenCalledWith(ENG, "invoice.updated"); // live status sync
   });
 
-  it("a Draft can NOT be marked paid via the action (must be Sent first) → {ok:false}, no transition", async () => {
+  it("a Draft can NOT be marked paid via the action (must be Sent first) → {ok:false}, no transition/nudge", async () => {
     m.getInvoice.mockResolvedValue({ id: "inv-1", engagementId: ENG, status: "draft" });
     const res = await markInvoicePaidAction(paidInput());
     expect(res.ok).toBe(false);
     expect(m.markInvoicePaid).not.toHaveBeenCalled();
+    expect(m.publishToEngagement).not.toHaveBeenCalled();
   });
 
   it("GUARD: getInvoice null → {ok:false}, no transition", async () => {

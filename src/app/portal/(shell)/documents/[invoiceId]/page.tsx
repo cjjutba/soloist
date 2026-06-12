@@ -9,6 +9,7 @@ import { getBranding } from "@/server/db/repositories/branding.repository";
 import { getEngagement } from "@/server/db/repositories/engagements.repository";
 import { getClientInvoice } from "@/server/db/repositories/invoices.repository";
 import { getTenant } from "@/server/db/repositories/tenants.repository";
+import { PortalInvoiceRealtime } from "../../portal-invoice-realtime";
 import { MarkInvoiceSeen } from "./mark-invoice-seen";
 
 /**
@@ -37,6 +38,8 @@ export default async function PortalInvoicePage({
 
   return (
     <div className="flex flex-col gap-4">
+      {/* Live: the status chip flips to Paid (or any change) without a reload. */}
+      <PortalInvoiceRealtime engagementId={session.engagementId} />
       <MarkInvoiceSeen invoiceId={invoice.id} />
       <FocusHeading className="sr-only">Invoice</FocusHeading>
       <div className="flex items-center justify-between gap-3">

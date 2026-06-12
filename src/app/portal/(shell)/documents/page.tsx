@@ -5,6 +5,7 @@ import { requireOnboardedClient } from "@/server/auth/session";
 import { listClientInvoices } from "@/server/db/repositories/invoices.repository";
 import { formatMoney } from "@/server/doc-engine/money";
 import { PortalEmpty } from "../../portal-empty";
+import { PortalInvoiceRealtime } from "../portal-invoice-realtime";
 
 const FOCUS_RING =
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background";
@@ -22,11 +23,18 @@ export default async function DocumentsPage() {
   const invoices = await listClientInvoices(session, session.engagementId);
 
   if (invoices.length === 0) {
-    return <PortalEmpty title="No documents yet" body="Invoices your freelancer sends will appear here." />;
+    return (
+      <>
+        {/* Live: when the freelancer sends the first invoice, this empty state becomes the list. */}
+        <PortalInvoiceRealtime engagementId={session.engagementId} />
+        <PortalEmpty title="No documents yet" body="Invoices your freelancer sends will appear here." />
+      </>
+    );
   }
 
   return (
     <div className="flex flex-col gap-4">
+      <PortalInvoiceRealtime engagementId={session.engagementId} />
       <FocusHeading className="font-display text-2xl">Documents</FocusHeading>
       <ul className="flex flex-col gap-2">
         {invoices.map((inv) => (

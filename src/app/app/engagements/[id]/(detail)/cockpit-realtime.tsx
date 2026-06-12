@@ -4,11 +4,17 @@ import { usePresenceViewers, useRealtimeRefresh } from "@/components/realtime/re
 import { engagementChannel } from "@/lib/realtime-channels";
 
 /** Re-runs the engagement-detail server components when the client views something, a new update
- * publishes, or a chat message arrives/is read — so "Client viewed X ago", the per-update Seen
- * badges, invoice "Seen", and the Messages-tab unread badge all update live without a new API.
- * Render-null. */
+ * publishes, an invoice status changes, or a chat message arrives/is read — so "Client viewed X ago",
+ * the per-update Seen badges, invoice "Seen", the invoice status chips (sent/paid), and the
+ * Messages-tab unread badge all update live without a new API. Render-null. */
 export function CockpitRealtime({ engagementId }: { engagementId: string }) {
-  useRealtimeRefresh(engagementChannel(engagementId), ["seen", "ship.published", "invoice.sent", "message"]);
+  useRealtimeRefresh(engagementChannel(engagementId), [
+    "seen",
+    "ship.published",
+    "invoice.sent",
+    "invoice.updated",
+    "message",
+  ]);
   return null;
 }
 

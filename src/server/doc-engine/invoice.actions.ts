@@ -11,6 +11,7 @@ import {
   markInvoiceSent,
 } from "@/server/db/repositories/invoices.repository";
 import { inngest } from "@/server/inngest/client";
+import { publishToEngagement } from "@/server/realtime/publish";
 import { createInvoiceSchema, invoiceActionSchema } from "./invoice.schema";
 
 export type CreateInvoiceResult = { ok: true; id: string } | { ok: false; error: string };
@@ -55,6 +56,17 @@ export async function createInvoiceAction(input: unknown): Promise<CreateInvoice
 function revalidateInvoice(engagementId: string, invoiceId: string): void {
   revalidatePath(`/app/engagements/${engagementId}/documents`); // the list (status chip)
   revalidatePath(`/app/engagements/${engagementId}/documents/${invoiceId}`); // this document view
+}
+
+/**
+ * Best-effort realtime nudge on a status transition (live invoice sync) — so BOTH parties' open
+ * invoice views refetch instantly: the client portal Documents list + detail (RSC, refreshed by
+ * PortalInvoiceRealtime) and the freelancer's other tabs/devices (refreshed by CockpitRealtime).
+ * "Signal, not data" — no payload. `publishToEngagement` is bounded + never throws, and the status
+ * write is already the durable truth, so this never affects the action's result.
+ */
+async function signalInvoiceUpdated(engagementId: string): Promise<void> {
+  await publishToEngagement(engagementId, "invoice.updated");
 }
 
 /**
@@ -106,6 +118,7 @@ export async function sendInvoiceAction(input: unknown): Promise<InvoiceStatusRe
 
     await emitInvoiceSent(sent);
     revalidateInvoice(engagementId, invoiceId);
+    await signalInvoiceUpdated(engagementId);
     return { ok: true };
   } catch (err) {
     console.error("[doc-engine] sendInvoiceAction failed:", err instanceof Error ? err.message : String(err));
@@ -116,7 +129,9 @@ export async function sendInvoiceAction(input: unknown): Promise<InvoiceStatusRe
 /**
  * Mark a Sent Invoice Paid (Story 5.2) — the manual, out-of-band status flip. `markInvoicePaid` is
  * guarded (`status='sent'`) so a Draft can NEVER skip to Paid (Draft → Sent → Paid only). NO Inngest
- * event, NO email (Paid is the Freelancer's private bookkeeping). Same ownership guard as send.
+ * event, NO email/notification (Paid is the Freelancer's private bookkeeping) — but it DOES publish a
+ * best-effort `invoice.updated` realtime nudge so the client's already-visible status chip flips to
+ * Paid live (live invoice sync). Same ownership guard as send.
  */
 export async function markInvoicePaidAction(input: unknown): Promise<InvoiceStatusResult> {
   const ctx = await requireFreelancer();
@@ -140,6 +155,7 @@ export async function markInvoicePaidAction(input: unknown): Promise<InvoiceStat
     if (!paid) return { ok: false, error: "Only a sent invoice can be marked paid." };
 
     revalidateInvoice(engagementId, invoiceId);
+    await signalInvoiceUpdated(engagementId);
     return { ok: true };
   } catch (err) {
     console.error("[doc-engine] markInvoicePaidAction failed:", err instanceof Error ? err.message : String(err));
