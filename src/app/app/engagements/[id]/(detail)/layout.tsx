@@ -40,7 +40,7 @@ export default async function EngagementDetailLayout({
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-8">
         <header className="flex flex-col gap-4">
           <Link
-            href="/app"
+            href="/app/engagements"
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             ← Engagements
@@ -70,7 +70,7 @@ export default async function EngagementDetailLayout({
                 Edit details
               </Link>
               {engagement.status !== "archived" ? (
-                <ArchiveButton id={engagement.id} name={engagement.name} redirectTo="/app" />
+                <ArchiveButton id={engagement.id} name={engagement.name} redirectTo="/app/engagements" />
               ) : null}
             </div>
           </div>
