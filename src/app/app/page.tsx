@@ -18,6 +18,8 @@ import {
 
 const CHART_WEEKS = 6;
 
+export const metadata = { title: "Overview · Soloist" };
+
 export default async function OverviewPage() {
   // Self-guard (positional-guard convention). The Tenant ghost-check lives in the layout.
   const session = await requireFreelancer();

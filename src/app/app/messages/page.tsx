@@ -2,6 +2,8 @@ import { MessageSquare } from "lucide-react";
 import { PagePlaceholder } from "@/components/cockpit/page-placeholder";
 import { requireFreelancer } from "@/server/auth/session";
 
+export const metadata = { title: "Messages · Soloist" };
+
 export default async function MessagesPage() {
   await requireFreelancer();
   return (

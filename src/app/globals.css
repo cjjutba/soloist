@@ -117,20 +117,6 @@ body {
   }
 }
 /*
- ---break---
- */
-.dark {
-  --sidebar: hsl(240 5.9% 10%);
-  --sidebar-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-primary: hsl(224.3 76.3% 48%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(240 3.7% 15.9%);
-  --sidebar-accent-foreground: hsl(240 4.8% 95.9%);
-  --sidebar-border: hsl(240 3.7% 15.9%);
-  --sidebar-ring: hsl(217.2 91.2% 59.8%);
-}
-
-/*
  * Cockpit surface theme (freelancer /app/*). A cool, enterprise palette layered over the warm
  * global tokens — scoped so the client portal, auth, and marketing surfaces stay warm/branded.
  * The `.cockpit-surface` twin lets Radix-portaled content (⌘K palette, dropdown menus), which

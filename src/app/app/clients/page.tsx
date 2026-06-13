@@ -2,6 +2,8 @@ import { Users } from "lucide-react";
 import { PagePlaceholder } from "@/components/cockpit/page-placeholder";
 import { requireFreelancer } from "@/server/auth/session";
 
+export const metadata = { title: "Clients · Soloist" };
+
 export default async function ClientsPage() {
   await requireFreelancer();
   return (

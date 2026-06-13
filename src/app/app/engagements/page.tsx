@@ -8,6 +8,8 @@ import { requireFreelancer } from "@/server/auth/session";
 import { getCockpitDashboard } from "@/server/cockpit/data";
 import { ArchiveButton } from "./archive-button";
 
+export const metadata = { title: "Engagements · Soloist" };
+
 export default async function EngagementsPage() {
   const session = await requireFreelancer();
   const engagements = await getCockpitDashboard(session);

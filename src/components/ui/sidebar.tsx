@@ -304,9 +304,12 @@ function SidebarRail({ className, ...props }: React.ComponentProps<"button">) {
   )
 }
 
-function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
+// Renders a <div>, not shadcn's default <main>: in this app each page owns the <main>
+// landmark (Overview, engagements, settings, engagement-detail, placeholders), so the inset
+// must be a neutral container to avoid nesting <main> inside <main> on every cockpit screen.
+function SidebarInset({ className, ...props }: React.ComponentProps<"div">) {
   return (
-    <main
+    <div
       data-slot="sidebar-inset"
       className={cn(
         "relative flex w-full flex-1 flex-col bg-background",

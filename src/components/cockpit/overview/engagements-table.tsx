@@ -25,6 +25,7 @@ export function EngagementsTable({ rows }: { rows: DashboardEngagement[] }) {
               <TableHead className="text-right">To curate</TableHead>
               <TableHead className="text-right">Unread</TableHead>
               <TableHead className="text-right">Last activity</TableHead>
+              <TableHead className="text-right">Client viewed</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -47,6 +48,9 @@ export function EngagementsTable({ rows }: { rows: DashboardEngagement[] }) {
                 </TableCell>
                 <TableCell className="text-right font-mono text-xs text-muted-foreground">
                   {formatRelativeTime(e.lastActivityAt)}
+                </TableCell>
+                <TableCell className="text-right font-mono text-xs text-muted-foreground">
+                  {e.lastSeenAt ? formatRelativeTime(e.lastSeenAt) : "—"}
                 </TableCell>
               </TableRow>
             ))}
