@@ -1,97 +1,75 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
-import { MessageCircle } from "lucide-react";
-import { buttonVariants } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
-import { CandidateBadge, StatusBadge } from "@/components/ui/badge";
-import { formatRelativeTime } from "@/lib/relative-time";
+import { AttentionCard } from "@/components/cockpit/overview/attention-card";
+import { EngagementsTable } from "@/components/cockpit/overview/engagements-table";
+import { KpiCards } from "@/components/cockpit/overview/kpi-cards";
+import { MomentumChart } from "@/components/cockpit/overview/momentum-chart";
+import { OutstandingInvoices } from "@/components/cockpit/overview/outstanding-invoices";
+import { RecentUpdates } from "@/components/cockpit/overview/recent-updates";
 import { requireFreelancer } from "@/server/auth/session";
-import { listDashboard } from "@/server/db/repositories/engagements.repository";
-import { getTenant } from "@/server/db/repositories/tenants.repository";
-import { ArchiveButton } from "./engagements/archive-button";
+import { getCockpitDashboard } from "@/server/cockpit/data";
+import { startOfMonthUTC, weeksAgoUTC } from "@/server/cockpit/dates";
+import { bucketByWeek, summarizeDashboard } from "@/server/cockpit/overview-summary";
+import {
+  invoiceMoneyStats,
+  listOutstandingInvoices,
+  listRecentPublishedUpdates,
+  publishedUpdateDates,
+} from "@/server/db/repositories/cockpit.repository";
 
-export default async function CockpitPage() {
-  // Self-guard via the canonical guard (returns the freelancer principal = a TenantContext),
-  // then read THROUGH the repository → withTenant → RLS.
+const CHART_WEEKS = 6;
+
+export const metadata = { title: "Overview · Soloist" };
+
+export default async function OverviewPage() {
+  // Self-guard (positional-guard convention). The Tenant ghost-check lives in the layout.
   const session = await requireFreelancer();
-  const [tenant, engagements] = await Promise.all([getTenant(session), listDashboard(session)]);
-  if (!tenant) notFound(); // session.tenantId is a ghost (deleted Tenant) → deny, don't degrade
+  const now = new Date();
+  const monthStart = startOfMonthUTC(now);
+  const chartSince = weeksAgoUTC(now, CHART_WEEKS);
+
+  const [dashboard, money, outstanding, recent, pubDates] = await Promise.all([
+    getCockpitDashboard(session), // request-cached → shared with the layout's chrome read
+    invoiceMoneyStats(session, monthStart),
+    listOutstandingInvoices(session),
+    listRecentPublishedUpdates(session),
+    publishedUpdateDates(session, chartSince),
+  ]);
+  if (!session.tenantId) notFound(); // defensive; requireFreelancer already guarantees it
+
+  const kpis = summarizeDashboard(dashboard);
+  const buckets = bucketByWeek(pubDates, CHART_WEEKS, now);
 
   return (
-    <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-8">
-      <header className="flex items-end justify-between gap-4">
-        <div>
-          <h1 className="font-display text-3xl">Engagements</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Each engagement is one client&apos;s branded workspace.
-          </p>
-        </div>
-        <Link href="/app/engagements/new" className={buttonVariants()}>
-          New engagement
-        </Link>
+    <main className="flex flex-1 flex-col gap-6 p-6">
+      <header>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Overview</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Your workspace health, delivery momentum, and what needs attention.
+        </p>
       </header>
 
-      {engagements.length === 0 ? (
-        <Card className="flex flex-col items-center gap-3 p-12 text-center">
-          <p className="text-muted-foreground">No engagements yet — create your first.</p>
-          <Link href="/app/engagements/new" className={buttonVariants({ variant: "outline" })}>
-            New engagement
-          </Link>
-        </Card>
-      ) : (
-        <ul className="flex flex-col gap-3">
-          {engagements.map((e) => (
-            <li key={e.id}>
-              <Card className="flex items-center justify-between gap-4 p-4">
-                <Link
-                  href={`/app/engagements/${e.id}`}
-                  className="flex min-w-0 flex-1 flex-col gap-1 rounded-[var(--radius-md)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  <span className="flex items-center gap-2">
-                    <span className="truncate font-medium">{e.name}</span>
-                    <StatusBadge status={e.status} />
-                    <CandidateBadge count={e.candidateCount} />
-                    {e.chatUnreadCount > 0 ? (
-                      <span
-                        className="inline-flex items-center gap-1 rounded-full bg-[#5b5bd6] px-1.5 font-mono text-[10px] font-medium leading-4 text-white"
-                        aria-label={`${e.chatUnreadCount} unread message${e.chatUnreadCount === 1 ? "" : "s"}`}
-                      >
-                        <MessageCircle className="size-2.5" aria-hidden />
-                        {e.chatUnreadCount > 99 ? "99+" : e.chatUnreadCount}
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <span className="truncate">{e.clientDisplayName}</span>
-                    <span aria-hidden>·</span>
-                    <time
-                      dateTime={e.lastActivityAt.toISOString()}
-                      title={e.lastActivityAt.toISOString()}
-                      className="shrink-0 font-mono text-xs"
-                    >
-                      {formatRelativeTime(e.lastActivityAt)}
-                    </time>
-                  </span>
-                  {e.lastSeenAt ? (
-                    <span className="text-xs text-emerald-700 dark:text-emerald-400">
-                      Client viewed {formatRelativeTime(e.lastSeenAt)}
-                    </span>
-                  ) : null}
-                </Link>
-                <div className="flex shrink-0 items-center gap-2">
-                  <Link
-                    href={`/app/engagements/${e.id}/edit`}
-                    className={buttonVariants({ variant: "ghost", size: "sm" })}
-                  >
-                    Edit
-                  </Link>
-                  <ArchiveButton id={e.id} name={e.name} />
-                </div>
-              </Card>
-            </li>
-          ))}
-        </ul>
-      )}
+      <KpiCards
+        activeEngagements={kpis.activeEngagements}
+        awaitingCuration={kpis.awaitingCuration}
+        unreadMessages={kpis.unreadMessages}
+        paidThisMonth={money.paidThisMonth}
+      />
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="flex flex-col gap-6 lg:col-span-2">
+          <MomentumChart buckets={buckets} />
+          <EngagementsTable rows={dashboard} />
+        </div>
+        <div className="flex flex-col gap-6">
+          <AttentionCard
+            awaitingCuration={kpis.awaitingCuration}
+            unreadMessages={kpis.unreadMessages}
+            outstandingCount={money.outstanding.reduce((n, b) => n + b.count, 0)}
+          />
+          <OutstandingInvoices rows={outstanding} />
+          <RecentUpdates updates={recent} />
+        </div>
+      </div>
     </main>
   );
 }
