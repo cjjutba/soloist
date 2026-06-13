@@ -38,3 +38,6 @@ _bmad/custom/config.user.toml
 .vercel
 /coverage
 .env*
+
+# Superpowers brainstorm visual companion (local-only)
+.superpowers/
