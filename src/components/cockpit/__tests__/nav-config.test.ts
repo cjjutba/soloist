@@ -51,4 +51,14 @@ describe("crumbsForPath", () => {
       { label: "Engagement" },
     ]);
   });
+  it("labels a uuid under /documents as Invoice (disambiguated by parent), not Engagement", () => {
+    const eng = "0190a1b2-c3d4-7000-8000-000000000000";
+    const inv = "0190a1b2-c3d4-7000-8000-000000000001";
+    expect(crumbsForPath(`/app/engagements/${eng}/documents/${inv}`)).toEqual([
+      { label: "Engagements", href: "/app/engagements" },
+      { label: "Engagement", href: `/app/engagements/${eng}` },
+      { label: "Documents", href: `/app/engagements/${eng}/documents` },
+      { label: "Invoice" },
+    ]);
+  });
 });

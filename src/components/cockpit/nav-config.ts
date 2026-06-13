@@ -104,7 +104,12 @@ export function crumbsForPath(pathname: string): { label: string; href?: string 
   let acc = "/app";
   rest.forEach((seg, i) => {
     acc += "/" + seg;
-    const label = SEGMENT_LABELS[seg] ?? (isUuid(seg) ? "Engagement" : seg);
+    // A uuid segment is labelled by its parent: an invoice id (under /documents) reads
+    // "Invoice", otherwise an engagement id reads "Engagement".
+    const prev = rest[i - 1];
+    const label =
+      SEGMENT_LABELS[seg] ??
+      (isUuid(seg) ? (prev === "documents" ? "Invoice" : "Engagement") : seg);
     crumbs.push(i === rest.length - 1 ? { label } : { label, href: acc });
   });
   return crumbs;
