@@ -22,14 +22,29 @@ export function RealtimeProvider({
   enabled: boolean;
   children: ReactNode;
 }) {
+  // Construct the client in the lazy initializer, but DON'T let it open a connection here:
+  // `autoConnect: false` is the fix. With the default (autoConnect: true) construction immediately
+  // opens a connection and fires the /api/realtime/token request — and because React Strict Mode
+  // (on by default in dev) double-invokes useState initializers, that spawned a SECOND
+  // auto-connecting client that was never stored and never closed: an orphaned connection re-authing
+  // forever, and — accumulated over a dev session — the flood of token-request errors seen when the
+  // dev server is killed (the route still 200s; the browser XHR is just aborted at the transport
+  // layer). With autoConnect:false the Strict-Mode duplicate is inert (never connects) → no orphan;
+  // the real client opens in the effect and is always closed on unmount (incl. logout, which is a
+  // soft client-side nav, so close-on-unmount is what tears the connection down). SSR and the
+  // realtime-off path render a null client (window-guarded; `enabled` false when the key is unset)
+  // → consumers no-op → polling fallback.
   const [client] = useState<Ably.Realtime | null>(() =>
     enabled && typeof window !== "undefined"
-      ? new Ably.Realtime({ authUrl: "/api/realtime/token", authMethod: "POST" })
+      ? new Ably.Realtime({ authUrl: "/api/realtime/token", authMethod: "POST", autoConnect: false })
       : null,
   );
 
   useEffect(() => {
     if (!client) return;
+    client.connect();
+    // close() is graceful and reversible — a later connect() re-opens — so Strict Mode's dev
+    // connect → close → connect remount cycle reconnects this same client cleanly (no orphan).
     return () => client.close();
   }, [client]);
 
