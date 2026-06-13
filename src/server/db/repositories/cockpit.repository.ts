@@ -10,6 +10,9 @@ async function invoiceTotalsByCurrency(ctx: TenantContext, status: "paid" | "sen
       .select({
         currency: invoices.currency,
         minor: sql<number>`coalesce(sum(${invoices.amountTotal}), 0)::int`,
+        // Unbounded row count per currency — the Overview's attention headline sums these so it
+        // isn't capped by the 5-row display list (listOutstandingInvoices).
+        count: sql<number>`count(*)::int`,
       })
       .from(invoices)
       .where(

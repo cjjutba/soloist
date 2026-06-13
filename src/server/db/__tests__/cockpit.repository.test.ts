@@ -73,8 +73,8 @@ const MONTH_START = new Date(Date.UTC(2000, 0, 1)); // far past → "this month"
 describe("invoiceMoneyStats", () => {
   it("sums paid (since monthStart) + outstanding by currency, RLS-scoped to the tenant", async () => {
     const stats = await invoiceMoneyStats(ctxA(), MONTH_START);
-    expect(stats.paidThisMonth).toEqual([{ currency: "PHP", minor: 5000 }]); // not 5000+9999 (B excluded)
-    expect(stats.outstanding).toEqual([{ currency: "PHP", minor: 3000 }]);
+    expect(stats.paidThisMonth).toEqual([{ currency: "PHP", minor: 5000, count: 1 }]); // not 5000+9999 (B excluded)
+    expect(stats.outstanding).toEqual([{ currency: "PHP", minor: 3000, count: 1 }]);
   });
   it("is empty for a tenant with no invoices in range", async () => {
     const empty = await invoiceMoneyStats(ctxB(), new Date(Date.UTC(3000, 0, 1)));
