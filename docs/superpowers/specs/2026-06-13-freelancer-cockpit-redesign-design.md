@@ -67,7 +67,7 @@ Rewrite `src/app/app/layout.tsx`:
 
 - shadcn `SidebarProvider` mounts in the cockpit layout (cookie-persisted open/collapsed; `⌘B` toggle is built in).
 - Reuse the existing global `providers.tsx` (TanStack Query, Sonner) — unchanged.
-- The app bar's notification bell reuses the existing realtime hook (`useRealtimeRefresh` / `useRealtimeInvalidate`) to refresh the unread state live. The cockpit-level realtime subscription scope is finalized in the plan; it must not duplicate or break the engagement-detail realtime provider.
+- **Cockpit-wide push-live refresh is deferred this pass.** Mounting a second `RealtimeProvider` at the cockpit layout would open a duplicate Ably connection and risk regressing the engagement-detail provider (which owns its own connection + presence). Instead, the Overview, sidebar counts, and activity bell are server-rendered from real data and refresh on navigation (standard for a dashboard landing). The engagement-detail realtime stays exactly as-is. Hoisting to a single shared cockpit-level provider is explicit future work (§12).
 
 ### 5.4 shadcn components to install
 
@@ -102,7 +102,7 @@ Rewrite `src/app/app/layout.tsx`:
 
 - **Breadcrumbs:** built from `usePathname()` against the `nav-config` label map. Known segments map to labels (Overview, Engagements, Settings → Account/Branding/GitHub, etc.). Dynamic segments (engagement `[id]`) resolve to a readable crumb; the engagement detail may supply its name via a lightweight context/slot, otherwise a generic "Engagement" label is shown. No extra blocking fetch is introduced for crumbs.
 - **`⌘K` command search:** shadcn `command` inside a `dialog`. Lists: (1) all nav destinations, (2) the freelancer's engagements (fetched client-side, RLS-scoped) for fuzzy jump. Selecting navigates. Opens via `⌘K`/`Ctrl+K` and via the header search affordance.
-- **Notifications:** bell with an unread indicator, wired to the real `/api/notifications`; dropdown lists recent items with a "View all" affordance; refreshed live via the existing realtime hook.
+- **Activity/notifications bell:** the existing `/api/notifications` route is **client-only** (it returns 403 for a freelancer — the notifications table is addressed to the client recipient), so the cockpit cannot reuse it. The bell instead surfaces a **real, freelancer-derived activity/attention feed**: the curation backlog, unread-message and outstanding-invoice counts (from the dashboard summary), plus recent published ship-updates. Server-computed; refreshes on navigation. (Cross-engagement push-live refresh is deferred — see §5.3.)
 - **Help:** dropdown with keyboard-shortcuts and docs/support links (links may be lightweight placeholders).
 - **Profile:** avatar dropdown — name/email, Account, Brand, Settings, and Logout (reusing existing `LogoutButton` behavior).
 
@@ -154,10 +154,10 @@ These are additive; no existing query changes behavior.
 ## 11. Risks & Mitigations
 
 - **Regression risk to live features.** Mitigation: wire (don't replace) Engagements/Settings/Brand; preserve the engagement-detail sub-layout; guard stays put; full suite must stay green.
-- **Realtime double-mounting.** The cockpit notification refresh must coexist with the engagement-detail realtime provider without duplicate subscriptions — finalized in the plan.
+- **Realtime double-mounting — resolved by deferral.** The cockpit does not mount a second `RealtimeProvider` this pass (§5.3), so there is no duplicate Ably connection; the engagement-detail provider is untouched.
 - **Theme bleed.** Cockpit tokens are scoped under `[data-surface="cockpit"]`; verify the portal/auth/email surfaces are visually unchanged.
 - **Chart dependency creep.** Use a hand-rolled SVG chart; do not add a charting library for a single widget.
 
 ## 12. Future (explicitly deferred)
 
-Flesh out the 8 placeholder features; dark mode; richer breadcrumb data; command-palette actions beyond navigation.
+Flesh out the 8 placeholder features; dark mode; richer breadcrumb data; command-palette actions beyond navigation; a single shared cockpit-level realtime provider (hoisted from engagement-detail) for cross-engagement push-live updates; a first-class freelancer notifications model.
